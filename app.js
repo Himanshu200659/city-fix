@@ -144,9 +144,20 @@ onAuthStateChanged(auth, async (user) => {
                 showToast("Citizen portal active");
             }
         } catch (error) {
-            console.error("Error fetching user role:", error);
-            showToast("Error checking credentials", true);
-            signOut(auth);
+            console.error("Not an admin or error fetching role:", error);
+            // Default to citizen if the query fails (likely due to permissions)
+            currentUserData = {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+                role: 'citizen'
+            };
+            
+            updateProfileUI(user);
+            switchView('citizen');
+            setupCitizenListener(user.uid);
+            showToast("Citizen portal active");
         }
     } else {
         currentUserData = null;
