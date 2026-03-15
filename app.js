@@ -1,546 +1,222 @@
-// =============================================
-// CityFix - Municipal Complaint Platform
-// Fully integrated with Firebase Auth + Firestore
-// =============================================
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityFix | Municipal Complaint Platform</title>
+    <meta name="description" content="CityFix bridges the gap between citizens and the municipality. Submit, track, and resolve local infrastructure issues seamlessly.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Local CSS -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Abstract Background Elements -->
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+    <div class="bg-shape shape-3"></div>
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import {
-    getAuth,
-    signInWithPopup,
-    GoogleAuthProvider,
-    signOut,
-    onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
-import {
-    getFirestore,
-    collection,
-    addDoc,
-    query,
-    where,
-    onSnapshot,
-    doc,
-    setDoc,
-    getDoc,
-    updateDoc,
-    serverTimestamp
-} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+    <!-- ========== HEADER ========== -->
+    <header class="main-header glass-panel">
+        <div class="header-container">
+            <h1 class="logo">City<span>Fix</span></h1>
+            <nav id="nav-actions">
+                <button id="btn-admin-portal" class="btn btn-text">Admin Access</button>
+                <div id="user-profile" class="hidden">
+                    <img id="user-avatar" src="" alt="User Avatar" class="avatar">
+                    <span id="user-name" class="name"></span>
+                    <button id="btn-logout" class="btn btn-outline btn-small">Sign Out</button>
+                </div>
+            </nav>
+        </div>
+    </header>
 
-// --- Firebase Configuration ---
-const firebaseConfig = {
-    apiKey: "AIzaSyCQ1cc8A2Vd0MWHYYd891c-dh2VWv5hFtA",
-    authDomain: "cityfix-12f8e.firebaseapp.com",
-    databaseURL: "https://cityfix-12f8e-default-rtdb.firebaseio.com",
-    projectId: "cityfix-12f8e",
-    storageBucket: "cityfix-12f8e.firebasestorage.app",
-    messagingSenderId: "668200888655",
-    appId: "1:668200888655:web:8798edf0179a8fa4e4fd3a"
-};
+    <!-- ========== MAIN CONTENT ========== -->
+    <main class="main-content">
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
+        <!-- ===== VIEW: Landing / Login ===== -->
+        <section id="view-landing" class="view-section active">
+            <div class="landing-grid">
+                <div class="landing-text">
+                    <h2 class="hero-title">Elevating <span>Civic</span> Responsibility.</h2>
+                    <p class="hero-subtitle">CityFix bridges the gap between citizens and the municipality. Submitting, tracking, and resolving local infrastructure issues has never been this seamless.</p>
+                    
+                    <div class="quote-card glass-panel">
+                        <div class="quote-icon">&#10077;</div>
+                        <p>"A thriving city is built on the proactive engagement of its people."</p>
+                    </div>
+                </div>
 
-// --- State ---
-let currentUserData = null;
-let unsubscribeCitizen = null;
-let unsubscribeAdmin = null;
-let pendingAdminRegistration = false; // Flag to handle admin registration timing
+                <div class="login-container">
+                    <div class="auth-card glass-panel float-anim">
+                        <h3>Citizen Portal</h3>
+                        <p>Sign in to file and track your reports.</p>
+                        <button id="btn-google-login" class="btn btn-google">
+                            <svg viewBox="0 0 24 24" class="google-icon" aria-hidden="true">
+                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                            </svg>
+                            Continue with Google
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-// --- DOM Elements ---
-const views = {
-    landing: document.getElementById('view-landing'),
-    citizen: document.getElementById('view-citizen-dashboard'),
-    admin: document.getElementById('view-admin-dashboard')
-};
+        <!-- ===== VIEW: Citizen Dashboard ===== -->
+        <section id="view-citizen-dashboard" class="view-section hidden">
+            <header class="dashboard-header">
+                <h2>Your <span>Dashboard</span></h2>
+                <p>Submit new issues or monitor the status of your active reports.</p>
+            </header>
 
-const ui = {
-    btnAdminPortal: document.getElementById('btn-admin-portal'),
-    btnGoogleLogin: document.getElementById('btn-google-login'),
-    btnAdminGoogleLogin: document.getElementById('btn-admin-google'),
-    btnLogout: document.getElementById('btn-logout'),
-    userProfile: document.getElementById('user-profile'),
-    userName: document.getElementById('user-name'),
-    userAvatar: document.getElementById('user-avatar'),
-
-    modalAdmin: document.getElementById('modal-adminAuth'),
-    closeModal: document.querySelector('.close-modal'),
-    adminAuthCode: document.getElementById('admin-auth-code'),
-    adminErrorMsg: document.getElementById('admin-error-msg'),
-
-    formComplaint: document.getElementById('form-complaint'),
-    btnGeolocate: document.getElementById('btn-geolocate'),
-    btnSubmitComplaint: document.getElementById('btn-submit-complaint'),
-    submitLoader: document.getElementById('submit-loader'),
-
-    citizenList: document.getElementById('citizen-complaints-list'),
-    adminList: document.getElementById('admin-complaints-list'),
-    sortAdmin: document.getElementById('sort-complaints'),
-
-    toast: document.getElementById('toast'),
-    toastMsg: document.getElementById('toast-msg'),
-    toastIcon: document.getElementById('toast-icon')
-};
-
-// =============================================
-// UTILITIES
-// =============================================
-
-function showToast(message, isError = false) {
-    ui.toastMsg.textContent = message;
-    ui.toastIcon.style.background = isError ? 'var(--color-danger)' : 'var(--color-success)';
-    ui.toastIcon.textContent = isError ? '!' : '✓';
-    ui.toast.style.borderColor = isError ? 'var(--color-danger)' : 'var(--glass-border)';
-
-    // Remove hidden first, then add show for animation
-    ui.toast.classList.remove('hidden');
-    // Force reflow so the browser registers the non-hidden state before animating
-    void ui.toast.offsetWidth;
-    ui.toast.classList.add('show');
-
-    setTimeout(() => {
-        ui.toast.classList.remove('show');
-        // After animation out, re-hide
-        setTimeout(() => ui.toast.classList.add('hidden'), 400);
-    }, 3000);
-}
-
-// Instant, synchronous view switch — no race conditions
-function switchView(viewName) {
-    // Hide all views immediately
-    Object.values(views).forEach(v => {
-        v.classList.remove('active');
-        v.classList.add('hidden');
-    });
-
-    // Show the target view
-    const target = views[viewName];
-    target.classList.remove('hidden');
-    // Force reflow for CSS animation
-    void target.offsetWidth;
-    target.classList.add('active');
-
-    // Update header
-    if (viewName === 'landing') {
-        ui.userProfile.classList.add('hidden');
-        ui.btnAdminPortal.classList.remove('hidden');
-    } else {
-        ui.userProfile.classList.remove('hidden');
-        ui.btnAdminPortal.classList.add('hidden');
-    }
-}
-
-function updateProfileUI(user) {
-    if (user) {
-        ui.userName.textContent = user.displayName ? user.displayName.split(' ')[0] : 'User';
-        ui.userAvatar.src = user.photoURL || '';
-    }
-}
-
-function getStatusClass(status) {
-    if (status === 'Resolved') return 'status-resolved';
-    if (status === 'Rejected') return 'status-rejected';
-    return 'status-pending';
-}
-
-function getPriorityClass(priority) {
-    if (priority === 'High') return 'priority-high';
-    if (priority === 'Medium') return 'priority-medium';
-    return 'priority-low';
-}
-
-function formatDate(timestamp) {
-    if (!timestamp || !timestamp.toDate) return 'Just now';
-    try {
-        const date = timestamp.toDate();
-        return new Intl.DateTimeFormat('en-US', {
-            month: 'short', day: 'numeric', year: 'numeric',
-            hour: 'numeric', minute: 'numeric'
-        }).format(date);
-    } catch (e) {
-        return 'Just now';
-    }
-}
-
-function cleanupListeners() {
-    if (unsubscribeCitizen) { unsubscribeCitizen(); unsubscribeCitizen = null; }
-    if (unsubscribeAdmin) { unsubscribeAdmin(); unsubscribeAdmin = null; }
-}
-
-// =============================================
-// AUTH FLOW
-// =============================================
-
-async function handleUserLoggedIn(user) {
-    let role = 'citizen';
-
-    // If we just registered as admin, skip the check — we know they're admin
-    if (pendingAdminRegistration) {
-        role = 'admin';
-        pendingAdminRegistration = false;
-    } else {
-        // Check Firestore for admin role
-        try {
-            const adminDoc = await getDoc(doc(db, "admins", user.uid));
-            if (adminDoc.exists()) {
-                role = 'admin';
-            }
-        } catch (err) {
-            // Permission denied or network error — default to citizen
-            console.warn("Could not check admin status, defaulting to citizen:", err.message);
-        }
-    }
-
-    currentUserData = {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        role: role
-    };
-
-    updateProfileUI(user);
-    cleanupListeners();
-
-    if (role === 'admin') {
-        switchView('admin');
-        setupAdminListener();
-        showToast("Welcome, Admin");
-    } else {
-        switchView('citizen');
-        setupCitizenListener(user.uid);
-        showToast("Welcome, Citizen");
-    }
-}
-
-function handleUserLoggedOut() {
-    currentUserData = null;
-    cleanupListeners();
-    switchView('landing');
-}
-
-// Firebase auth state observer
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        handleUserLoggedIn(user);
-    } else {
-        handleUserLoggedOut();
-    }
-});
-
-// =============================================
-// EVENT LISTENERS
-// =============================================
-
-// --- Citizen Google Login ---
-ui.btnGoogleLogin.addEventListener('click', async () => {
-    try {
-        ui.btnGoogleLogin.disabled = true;
-        ui.btnGoogleLogin.style.opacity = '0.7';
-        await signInWithPopup(auth, provider);
-    } catch (error) {
-        console.error("Login Error:", error);
-        if (error.code !== 'auth/popup-closed-by-user') {
-            showToast("Login failed: " + error.message, true);
-        }
-    } finally {
-        ui.btnGoogleLogin.disabled = false;
-        ui.btnGoogleLogin.style.opacity = '1';
-    }
-});
-
-// --- Admin Registration + Login ---
-ui.btnAdminGoogleLogin.addEventListener('click', async () => {
-    const code = ui.adminAuthCode.value.trim();
-
-    // Validate authorization code
-    if (code !== "CITYFIX_ADMIN_2024") {
-        ui.adminErrorMsg.textContent = "Invalid authorization code.";
-        ui.adminErrorMsg.classList.remove('hidden');
-        return;
-    }
-
-    try {
-        ui.adminErrorMsg.classList.add('hidden');
-        ui.btnAdminGoogleLogin.disabled = true;
-        ui.btnAdminGoogleLogin.style.opacity = '0.7';
-
-        // Set the flag BEFORE signing in so handleUserLoggedIn knows to treat as admin
-        pendingAdminRegistration = true;
-
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-
-        // Write to admins collection
-        await setDoc(doc(db, "admins", user.uid), {
-            email: user.email,
-            displayName: user.displayName,
-            registeredAt: serverTimestamp()
-        }, { merge: true });
-
-        // Close modal
-        ui.modalAdmin.classList.add('hidden');
-        ui.adminAuthCode.value = "";
-
-        // If onAuthStateChanged already fired (user was already logged in),
-        // we need to manually re-route since the flag was set after
-        if (currentUserData && currentUserData.role !== 'admin') {
-            currentUserData.role = 'admin';
-            cleanupListeners();
-            switchView('admin');
-            setupAdminListener();
-            showToast("Admin access granted!");
-        }
-
-    } catch (error) {
-        console.error("Admin Login Error:", error);
-        pendingAdminRegistration = false;
-        if (error.code !== 'auth/popup-closed-by-user') {
-            ui.adminErrorMsg.textContent = error.message;
-            ui.adminErrorMsg.classList.remove('hidden');
-        }
-    } finally {
-        ui.btnAdminGoogleLogin.disabled = false;
-        ui.btnAdminGoogleLogin.style.opacity = '1';
-    }
-});
-
-// --- Logout ---
-ui.btnLogout.addEventListener('click', () => {
-    signOut(auth);
-});
-
-// --- Admin Modal ---
-ui.btnAdminPortal.addEventListener('click', () => {
-    ui.modalAdmin.classList.remove('hidden');
-});
-
-ui.closeModal.addEventListener('click', () => {
-    ui.modalAdmin.classList.add('hidden');
-    ui.adminErrorMsg.classList.add('hidden');
-});
-
-// Close modal on backdrop click
-document.querySelector('.modal-backdrop')?.addEventListener('click', () => {
-    ui.modalAdmin.classList.add('hidden');
-    ui.adminErrorMsg.classList.add('hidden');
-});
-
-// --- Geolocation ---
-ui.btnGeolocate.addEventListener('click', () => {
-    if (!("geolocation" in navigator)) {
-        showToast("Geolocation is not supported by your browser", true);
-        return;
-    }
-
-    const originalHTML = ui.btnGeolocate.innerHTML;
-    ui.btnGeolocate.innerHTML = '<div class="loader" style="width:14px;height:14px;border-width:2px;border-top-color:var(--color-text-primary)"></div>';
-
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            document.getElementById('complaint-locality').value =
-                `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
-            ui.btnGeolocate.innerHTML = '✓';
-            setTimeout(() => { ui.btnGeolocate.innerHTML = originalHTML; }, 2000);
-        },
-        () => {
-            showToast("Location access denied or unavailable", true);
-            ui.btnGeolocate.innerHTML = originalHTML;
-        }
-    );
-});
-
-// --- Submit Complaint ---
-ui.formComplaint.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!currentUserData) return;
-
-    const submitSpan = ui.btnSubmitComplaint.querySelector('span');
-    submitSpan.classList.add('hidden');
-    ui.submitLoader.classList.remove('hidden');
-    ui.btnSubmitComplaint.disabled = true;
-
-    try {
-        await addDoc(collection(db, "complaints"), {
-            city: document.getElementById('complaint-city').value.trim(),
-            locality: document.getElementById('complaint-locality').value.trim(),
-            priority: document.getElementById('complaint-priority').value,
-            description: document.getElementById('complaint-description').value.trim(),
-            status: 'Pending',
-            userId: currentUserData.uid,
-            userEmail: currentUserData.email,
-            userName: currentUserData.displayName || 'Citizen',
-            createdAt: serverTimestamp()
-        });
-
-        ui.formComplaint.reset();
-        showToast("Report submitted successfully!");
-    } catch (error) {
-        console.error("Error submitting complaint:", error);
-        showToast("Failed to submit report: " + error.message, true);
-    } finally {
-        submitSpan.classList.remove('hidden');
-        ui.submitLoader.classList.add('hidden');
-        ui.btnSubmitComplaint.disabled = false;
-    }
-});
-
-// =============================================
-// DATA LISTENERS (Real-time Firestore)
-// =============================================
-
-function setupCitizenListener(uid) {
-    if (unsubscribeCitizen) unsubscribeCitizen();
-
-    const q = query(
-        collection(db, "complaints"),
-        where("userId", "==", uid)
-    );
-
-    unsubscribeCitizen = onSnapshot(q,
-        (snapshot) => {
-            if (snapshot.empty) {
-                ui.citizenList.innerHTML = '<div class="loading-state"><p>You haven\'t filed any reports yet.</p></div>';
-                return;
-            }
-
-            // Client-side sort by date (newest first)
-            const sorted = [...snapshot.docs].sort((a, b) => {
-                const dA = a.data().createdAt?.toDate?.() || new Date(0);
-                const dB = b.data().createdAt?.toDate?.() || new Date(0);
-                return dB - dA;
-            });
-
-            ui.citizenList.innerHTML = sorted.map(docSnap => {
-                const d = docSnap.data();
-                return `
-                    <div class="glass-panel complaint-card ${getPriorityClass(d.priority)}">
-                        <div class="card-header">
-                            <span class="card-title">${d.city} — ${d.priority} Priority</span>
-                            <span class="status-badge ${getStatusClass(d.status)}">${d.status}</span>
+            <div class="dashboard-grid">
+                <!-- Complaint Form -->
+                <div class="form-card glass-panel">
+                    <h3>File a Report</h3>
+                    <form id="form-complaint">
+                        <div class="form-row">
+                            <div class="form-group half">
+                                <label for="complaint-city">City</label>
+                                <input type="text" id="complaint-city" placeholder="e.g. Metropolis" required>
+                            </div>
+                            <div class="form-group half">
+                                <label for="complaint-locality">Locality</label>
+                                <div class="input-with-btn">
+                                    <input type="text" id="complaint-locality" placeholder="Sector, Street, or Coordinates" required>
+                                    <button type="button" id="btn-geolocate" class="icon-btn" title="Get current location">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="card-location">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path></svg>
-                            ${d.locality}
+                        
+                        <div class="form-group">
+                            <label for="complaint-priority">Impact Priority</label>
+                            <div class="custom-select-wrapper">
+                                <select id="complaint-priority" required>
+                                    <option value="Low">Low (Structural defect, no immediate danger)</option>
+                                    <option value="Medium" selected>Medium (Nuisance, requires attention)</option>
+                                    <option value="High">High (Immediate hazard, public safety risk)</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="card-desc">${d.description}</div>
-                        <div class="card-footer">
-                            <span>ID: ${docSnap.id.substring(0, 8).toUpperCase()}</span>
-                            <span>${formatDate(d.createdAt)}</span>
+
+                        <div class="form-group">
+                            <label for="complaint-description">Details</label>
+                            <textarea id="complaint-description" rows="4" placeholder="Describe the issue in detail..." required></textarea>
+                        </div>
+
+                        <button type="submit" id="btn-submit-complaint" class="btn btn-primary btn-block">
+                            <span>Submit Report</span>
+                            <div class="loader hidden" id="submit-loader"></div>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Past Complaints -->
+                <div class="records-container">
+                    <div class="records-header">
+                        <h3>Recent Activity</h3>
+                    </div>
+                    <div id="citizen-complaints-list" class="complaints-list">
+                        <div class="loading-state">
+                            <div class="spinner"></div>
+                            <p>Loading your reports...</p>
                         </div>
                     </div>
-                `;
-            }).join('');
-        },
-        (error) => {
-            console.error("Citizen data fetch error:", error);
-            ui.citizenList.innerHTML = `<div class="loading-state"><p style="color:var(--color-danger)">Error loading data: ${error.message}</p></div>`;
-        }
-    );
-}
+                </div>
+            </div>
+        </section>
 
-function setupAdminListener(sortMethod = 'date-desc') {
-    if (unsubscribeAdmin) unsubscribeAdmin();
+        <!-- ===== VIEW: Admin Dashboard ===== -->
+        <section id="view-admin-dashboard" class="view-section hidden">
+            <header class="dashboard-header flex-between">
+                <div>
+                    <h2>Admin <span>Terminal</span></h2>
+                    <p>Manage and update municipal reports.</p>
+                </div>
+                <div class="admin-controls glass-panel-sm">
+                    <label for="sort-complaints">Sort by:</label>
+                    <div class="custom-select-wrapper inline">
+                        <select id="sort-complaints">
+                            <option value="date-desc">Newest First</option>
+                            <option value="date-asc">Oldest First</option>
+                            <option value="priority">Highest Priority</option>
+                        </select>
+                    </div>
+                </div>
+            </header>
+            
+            <div class="admin-panel glass-panel">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Reporter</th>
+                                <th>Location</th>
+                                <th>Issue</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Update</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-complaints-list">
+                            <tr><td colspan="7" class="text-center py-4">Fetching reports...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
 
-    // Fetch ALL complaints (no server-side ordering to avoid index requirements)
-    const q = query(collection(db, "complaints"));
+    </main>
 
-    unsubscribeAdmin = onSnapshot(q,
-        (snapshot) => {
-            if (snapshot.empty) {
-                ui.adminList.innerHTML = '<tr><td colspan="7" class="text-center py-4">No reports found in the system.</td></tr>';
-                return;
-            }
+    <!-- ========== ADMIN AUTHORIZATION MODAL ========== -->
+    <div id="modal-adminAuth" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content glass-panel bounce-in">
+            <button class="close-modal" aria-label="Close modal">&times;</button>
+            <div class="modal-header">
+                <h3>Admin Authorization</h3>
+                <p>Register your Google account as an administrator.</p>
+            </div>
+            
+            <form id="form-admin-register">
+                <div class="form-group">
+                    <label for="admin-auth-code">Secret Authorization Code</label>
+                    <input type="password" id="admin-auth-code" placeholder="Enter provided passcode" required>
+                    <small class="form-help">Only authorized municipal personnel have access to this code.</small>
+                </div>
+                
+                <div class="auth-box">
+                    <p>You will be signed in with your Google account and registered as an Admin.</p>
+                    <button type="button" id="btn-admin-google" class="btn btn-google btn-block">
+                        <svg viewBox="0 0 24 24" class="google-icon" aria-hidden="true">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        </svg>
+                        Sign in as Admin
+                    </button>
+                    <p id="admin-error-msg" class="error-text hidden"></p>
+                </div>
+            </form>
+        </div>
+    </div>
 
-            // Client-side sorting
-            let docs = [...snapshot.docs];
+    <!-- ========== TOAST NOTIFICATION ========== -->
+    <div id="toast" class="toast hidden">
+        <span id="toast-icon">&#10003;</span>
+        <span id="toast-msg">Operation successful</span>
+    </div>
 
-            if (sortMethod === 'priority') {
-                const pMap = { 'High': 3, 'Medium': 2, 'Low': 1 };
-                docs.sort((a, b) => (pMap[b.data().priority] || 0) - (pMap[a.data().priority] || 0));
-            } else if (sortMethod === 'date-asc') {
-                docs.sort((a, b) => {
-                    const dA = a.data().createdAt?.toDate?.() || new Date(0);
-                    const dB = b.data().createdAt?.toDate?.() || new Date(0);
-                    return dA - dB;
-                });
-            } else {
-                // date-desc (default)
-                docs.sort((a, b) => {
-                    const dA = a.data().createdAt?.toDate?.() || new Date(0);
-                    const dB = b.data().createdAt?.toDate?.() || new Date(0);
-                    return dB - dA;
-                });
-            }
-
-            ui.adminList.innerHTML = docs.map(docSnap => {
-                const d = docSnap.data();
-                const id = docSnap.id;
-                const priorityColor = d.priority === 'High' ? 'var(--color-danger)' :
-                                      d.priority === 'Medium' ? 'var(--color-warning)' : 'var(--color-success)';
-                return `
-                    <tr>
-                        <td>
-                            <div style="font-size:0.85em; color:var(--color-text-secondary); margin-bottom:4px;">${id.substring(0, 8).toUpperCase()}</div>
-                            ${formatDate(d.createdAt)}
-                        </td>
-                        <td>
-                            <div style="font-weight:500">${d.userName || 'Citizen'}</div>
-                            <div style="font-size:0.8em; color:var(--color-text-secondary)">${d.userEmail || ''}</div>
-                        </td>
-                        <td>
-                            <div style="font-weight:500">${d.city || ''}</div>
-                            <div style="font-size:0.85em; color:var(--color-text-secondary)">${d.locality || ''}</div>
-                        </td>
-                        <td>
-                            <div style="max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${d.description || ''}">${d.description || ''}</div>
-                        </td>
-                        <td><span style="color:${priorityColor}; font-weight:600;">${d.priority}</span></td>
-                        <td><span class="status-badge ${getStatusClass(d.status)}">${d.status}</span></td>
-                        <td>
-                            <select class="status-update" data-id="${id}" data-current="${d.status}">
-                                <option value="Pending" ${d.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                                <option value="Resolved" ${d.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
-                                <option value="Rejected" ${d.status === 'Rejected' ? 'selected' : ''}>Rejected</option>
-                            </select>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-
-            // Attach change listeners to status dropdowns
-            document.querySelectorAll('.status-update').forEach(sel => {
-                sel.addEventListener('change', async (e) => {
-                    const docId = e.target.dataset.id;
-                    const newStatus = e.target.value;
-                    const originalStatus = e.target.dataset.current;
-                    if (newStatus === originalStatus) return;
-
-                    try {
-                        e.target.disabled = true;
-                        await updateDoc(doc(db, "complaints", docId), {
-                            status: newStatus,
-                            updatedAt: serverTimestamp()
-                        });
-                        showToast(`Status updated to ${newStatus}`);
-                    } catch (err) {
-                        console.error("Update error:", err);
-                        showToast("Failed to update status", true);
-                        e.target.value = originalStatus;
-                    } finally {
-                        e.target.disabled = false;
-                    }
-                });
-            });
-        },
-        (error) => {
-            console.error("Admin data fetch error:", error);
-            ui.adminList.innerHTML = `<tr><td colspan="7" class="text-center py-4" style="color:var(--color-danger)">Permission Error: Update your Firestore Security Rules to allow reads on the "complaints" collection.</td></tr>`;
-        }
-    );
-}
-
-// --- Admin Sort Control ---
-ui.sortAdmin.addEventListener('change', (e) => {
-    setupAdminListener(e.target.value);
-});
+    <!-- ========== SCRIPTS ========== -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
