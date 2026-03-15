@@ -3,8 +3,6 @@
 // ══════════════════════════════════════════════════════
 import { initializeApp }
   from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getAnalytics }
-  from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
 import {
   getAuth, GoogleAuthProvider,
   signInWithPopup, signOut, onAuthStateChanged
@@ -25,7 +23,6 @@ const firebaseConfig = {
 };
 
 const app  = initializeApp(firebaseConfig);
-getAnalytics(app);
 const auth = getAuth(app);
 const db   = getDatabase(app);
 
@@ -85,9 +82,9 @@ function statusCSSClass(s) {
 // ─── State ──────────────────────────────────────────────
 let currentUser   = null;
 let currentRole   = 'citizen';
-let wantAdminRole = false;      // set by which login button was clicked
-let feedUnsub     = null;       // unsubscribe fn for citizen feed listener
-let adminUnsub    = null;       // unsubscribe fn for admin listener
+let wantAdminRole = false;
+let feedUnsub     = null;
+let adminUnsub    = null;
 
 // ─── Landing stats (public, runs always) ────────────────
 onValue(ref(db, 'complaints'), snap => {
@@ -107,7 +104,9 @@ async function loginWith(asAdmin) {
   try {
     await signInWithPopup(auth, new GoogleAuthProvider());
   } catch (e) {
-    toast('Login failed: ' + e.message, 'error');
+    if (e.code !== 'auth/popup-closed-by-user') {
+      toast('Login failed: ' + e.message, 'error');
+    }
   }
 }
 
@@ -119,7 +118,6 @@ onAuthStateChanged(auth, async user => {
   } else {
     currentUser = null;
     currentRole = 'citizen';
-    // Detach any listeners
     if (feedUnsub)  { feedUnsub();  feedUnsub  = null; }
     if (adminUnsub) { adminUnsub(); adminUnsub = null; }
     showView('landing');
@@ -127,7 +125,6 @@ onAuthStateChanged(auth, async user => {
 });
 
 async function resolveRole(user) {
-  // If user clicked "Admin" login button, write admin role first
   if (wantAdminRole) {
     await update(ref(db, `users/${user.uid}`), {
       role: 'admin', email: user.email, name: user.displayName
@@ -135,12 +132,10 @@ async function resolveRole(user) {
     wantAdminRole = false;
   }
 
-  // Read role from DB
   const snap = await get(ref(db, `users/${user.uid}/role`));
   if (snap.exists()) {
-    currentRole = snap.val(); // 'admin' | 'citizen'
+    currentRole = snap.val();
   } else {
-    // First-ever login → default citizen
     await update(ref(db, `users/${user.uid}`), {
       role: 'citizen', email: user.email, name: user.displayName
     });
@@ -149,18 +144,15 @@ async function resolveRole(user) {
 }
 
 function bootApp() {
-  // Update sidebar user info
   const name = currentUser.displayName || currentUser.email || 'User';
   el('user-avatar').textContent    = initials(name);
   el('user-name').textContent      = name.split(' ')[0];
   el('user-role-label').textContent = currentRole === 'admin' ? 'Admin' : 'Citizen';
   el('user-role-label').className  = 'user-role-badge' + (currentRole === 'admin' ? ' admin' : '');
 
-  // Show correct sidebar nav
   el('citizen-nav').style.display = currentRole === 'citizen' ? 'flex' : 'none';
   el('admin-nav').style.display   = currentRole === 'admin'   ? 'flex' : 'none';
 
-  // Route to first panel
   if (currentRole === 'admin') {
     showPanel('panel-admin');
     highlightNav('panel-admin');
@@ -188,7 +180,6 @@ document.querySelectorAll('.nav-item').forEach(btn => {
   });
 });
 
-// "New Report" shortcut from feed header
 el('btn-goto-new').addEventListener('click', () => {
   showPanel('panel-new');
   highlightNav('panel-new');
@@ -251,7 +242,7 @@ el('form-complaint').addEventListener('submit', async e => {
 
   try {
     await push(ref(db, 'complaints'), complaint);
-    toast('✅ Report submitted successfully!', 'success');
+    toast('Report submitted successfully!', 'success');
     el('form-complaint').reset();
     el('geo-icon').textContent = '📍';
     showPanel('panel-feed');
@@ -297,12 +288,10 @@ function subscribeFeed() {
   feedUnsub = onValue(q, snap => {
     feedCache = [];
     snap.forEach(child => feedCache.push({ id: child.key, ...child.val() }));
-    // Newest first, and only this user's reports
     feedCache = feedCache.filter(c => c.uid === currentUser.uid).reverse();
     applyFeedFilters();
   });
 
-  // Attach filter listeners (only once)
   el('feed-filter-status').onchange   = applyFeedFilters;
   el('feed-filter-priority').onchange = applyFeedFilters;
 }
@@ -353,7 +342,7 @@ function subscribeAdmin() {
   adminUnsub = onValue(q, snap => {
     adminCache = [];
     snap.forEach(child => adminCache.push({ id: child.key, ...child.val() }));
-    adminCache.reverse();  // newest first
+    adminCache.reverse();
     el('admin-count-badge').textContent = adminCache.length;
     applyAdminFilters();
   });
@@ -375,7 +364,7 @@ function applyAdminFilters() {
       case 'date-asc':      return a.createdAt - b.createdAt;
       case 'priority-desc': return (PRIO[b.priority] || 0) - (PRIO[a.priority] || 0);
       case 'priority-asc':  return (PRIO[a.priority] || 0) - (PRIO[b.priority] || 0);
-      default:              return b.createdAt - a.createdAt; // date-desc
+      default:              return b.createdAt - a.createdAt;
     }
   });
 
@@ -396,14 +385,8 @@ function renderAdminTable(data) {
 
   const thead = document.createElement('thead');
   thead.innerHTML = `<tr>
-    <th>Date</th>
-    <th>Reporter</th>
-    <th>Category</th>
-    <th>Priority</th>
-    <th>Address</th>
-    <th>Description</th>
-    <th>Status</th>
-    <th>Update Status</th>
+    <th>Date</th><th>Reporter</th><th>Category</th><th>Priority</th>
+    <th>Address</th><th>Description</th><th>Status</th><th>Update Status</th>
   </tr>`;
   table.appendChild(thead);
 
@@ -432,12 +415,11 @@ function renderAdminTable(data) {
   table.appendChild(tbody);
   wrap.appendChild(table);
 
-  // Single delegated listener on tbody (re-mounted each render, so no duplicates)
   tbody.addEventListener('click', async e => {
     const btn = e.target.closest('.btn-update');
     if (!btn) return;
     const id  = btn.dataset.id;
-    const sel = btn.previousElementSibling; // the <select> before the button
+    const sel = btn.previousElementSibling;
     if (!sel) return;
     btn.textContent = '…';
     btn.disabled = true;
@@ -464,7 +446,6 @@ function subscribeAdminStats() {
     el('sc-progress').querySelector('.sc-num').textContent = all.filter(c => c.status === 'In Progress').length;
     el('sc-resolved').querySelector('.sc-num').textContent = all.filter(c => c.status === 'Resolved').length;
 
-    // Category bar chart
     const cats = {};
     all.forEach(c => { if (c.category) cats[c.category] = (cats[c.category] || 0) + 1; });
     const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
