@@ -1,19 +1,22 @@
+// =============================================
+// CityFix - Municipal Complaint Platform
+// Fully integrated with Firebase Auth + Firestore
+// =============================================
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { 
-    getAuth, 
-    signInWithPopup, 
-    GoogleAuthProvider, 
-    signOut, 
-    onAuthStateChanged 
+import {
+    getAuth,
+    signInWithPopup,
+    GoogleAuthProvider,
+    signOut,
+    onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
-import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    getDocs, 
-    query, 
-    where, 
-    orderBy, 
+import {
+    getFirestore,
+    collection,
+    addDoc,
+    query,
+    where,
     onSnapshot,
     doc,
     setDoc,
@@ -33,16 +36,16 @@ const firebaseConfig = {
     appId: "1:668200888655:web:8798edf0179a8fa4e4fd3a"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
 // --- State ---
-let currentUserData = null; // { uid, email, displayName, photoURL, role: 'citizen' | 'admin' }
+let currentUserData = null;
 let unsubscribeCitizen = null;
 let unsubscribeAdmin = null;
+let pendingAdminRegistration = false; // Flag to handle admin registration timing
 
 // --- DOM Elements ---
 const views = {
@@ -59,49 +62,65 @@ const ui = {
     userProfile: document.getElementById('user-profile'),
     userName: document.getElementById('user-name'),
     userAvatar: document.getElementById('user-avatar'),
-    
+
     modalAdmin: document.getElementById('modal-adminAuth'),
     closeModal: document.querySelector('.close-modal'),
     adminAuthCode: document.getElementById('admin-auth-code'),
     adminErrorMsg: document.getElementById('admin-error-msg'),
-    
+
     formComplaint: document.getElementById('form-complaint'),
     btnGeolocate: document.getElementById('btn-geolocate'),
     btnSubmitComplaint: document.getElementById('btn-submit-complaint'),
     submitLoader: document.getElementById('submit-loader'),
-    
+
     citizenList: document.getElementById('citizen-complaints-list'),
     adminList: document.getElementById('admin-complaints-list'),
     sortAdmin: document.getElementById('sort-complaints'),
-    
+
     toast: document.getElementById('toast'),
-    toastMsg: document.getElementById('toast-msg')
+    toastMsg: document.getElementById('toast-msg'),
+    toastIcon: document.getElementById('toast-icon')
 };
 
-// --- Utilities ---
+// =============================================
+// UTILITIES
+// =============================================
+
 function showToast(message, isError = false) {
     ui.toastMsg.textContent = message;
+    ui.toastIcon.style.background = isError ? 'var(--color-danger)' : 'var(--color-success)';
+    ui.toastIcon.textContent = isError ? '!' : '✓';
     ui.toast.style.borderColor = isError ? 'var(--color-danger)' : 'var(--glass-border)';
-    document.getElementById('toast-icon').style.background = isError ? 'var(--color-danger)' : 'var(--color-success)';
-    document.getElementById('toast-icon').textContent = isError ? '!' : '✓';
-    
+
+    // Remove hidden first, then add show for animation
+    ui.toast.classList.remove('hidden');
+    // Force reflow so the browser registers the non-hidden state before animating
+    void ui.toast.offsetWidth;
     ui.toast.classList.add('show');
-    setTimeout(() => ui.toast.classList.remove('show'), 3000);
+
+    setTimeout(() => {
+        ui.toast.classList.remove('show');
+        // After animation out, re-hide
+        setTimeout(() => ui.toast.classList.add('hidden'), 400);
+    }, 3000);
 }
 
+// Instant, synchronous view switch — no race conditions
 function switchView(viewName) {
+    // Hide all views immediately
     Object.values(views).forEach(v => {
         v.classList.remove('active');
-        setTimeout(() => v.classList.add('hidden'), 300); // fade out duration
+        v.classList.add('hidden');
     });
-    
-    setTimeout(() => {
-        views[viewName].classList.remove('hidden');
-        // Trigger reflow for animation
-        void views[viewName].offsetWidth;
-        views[viewName].classList.add('active');
-    }, 300);
 
+    // Show the target view
+    const target = views[viewName];
+    target.classList.remove('hidden');
+    // Force reflow for CSS animation
+    void target.offsetWidth;
+    target.classList.add('active');
+
+    // Update header
     if (viewName === 'landing') {
         ui.userProfile.classList.add('hidden');
         ui.btnAdminPortal.classList.remove('hidden');
@@ -113,106 +132,185 @@ function switchView(viewName) {
 
 function updateProfileUI(user) {
     if (user) {
-        ui.userName.textContent = user.displayName?.split(' ')[0] || 'User';
-        ui.userAvatar.src = user.photoURL || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>';
+        ui.userName.textContent = user.displayName ? user.displayName.split(' ')[0] : 'User';
+        ui.userAvatar.src = user.photoURL || '';
     }
 }
 
-// --- Auth Flow ---
-onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        // Check role
+function getStatusClass(status) {
+    if (status === 'Resolved') return 'status-resolved';
+    if (status === 'Rejected') return 'status-rejected';
+    return 'status-pending';
+}
+
+function getPriorityClass(priority) {
+    if (priority === 'High') return 'priority-high';
+    if (priority === 'Medium') return 'priority-medium';
+    return 'priority-low';
+}
+
+function formatDate(timestamp) {
+    if (!timestamp || !timestamp.toDate) return 'Just now';
+    try {
+        const date = timestamp.toDate();
+        return new Intl.DateTimeFormat('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: 'numeric'
+        }).format(date);
+    } catch (e) {
+        return 'Just now';
+    }
+}
+
+function cleanupListeners() {
+    if (unsubscribeCitizen) { unsubscribeCitizen(); unsubscribeCitizen = null; }
+    if (unsubscribeAdmin) { unsubscribeAdmin(); unsubscribeAdmin = null; }
+}
+
+// =============================================
+// AUTH FLOW
+// =============================================
+
+async function handleUserLoggedIn(user) {
+    let role = 'citizen';
+
+    // If we just registered as admin, skip the check — we know they're admin
+    if (pendingAdminRegistration) {
+        role = 'admin';
+        pendingAdminRegistration = false;
+    } else {
+        // Check Firestore for admin role
         try {
             const adminDoc = await getDoc(doc(db, "admins", user.uid));
-            currentUserData = {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-                role: adminDoc.exists() ? 'admin' : 'citizen'
-            };
-            
-            updateProfileUI(user);
-            
-            if (currentUserData.role === 'admin') {
-                switchView('admin');
-                setupAdminListener();
-                showToast("Welcome back, Admin");
-            } else {
-                switchView('citizen');
-                setupCitizenListener(user.uid);
-                showToast("Citizen portal active");
+            if (adminDoc.exists()) {
+                role = 'admin';
             }
-        } catch (error) {
-            console.error("Not an admin or error fetching role:", error);
-            // Default to citizen if the query fails (likely due to permissions)
-            currentUserData = {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-                role: 'citizen'
-            };
-            
-            updateProfileUI(user);
-            switchView('citizen');
-            setupCitizenListener(user.uid);
-            showToast("Citizen portal active");
+        } catch (err) {
+            // Permission denied or network error — default to citizen
+            console.warn("Could not check admin status, defaulting to citizen:", err.message);
         }
+    }
+
+    currentUserData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        role: role
+    };
+
+    updateProfileUI(user);
+    cleanupListeners();
+
+    if (role === 'admin') {
+        switchView('admin');
+        setupAdminListener();
+        showToast("Welcome, Admin");
     } else {
-        currentUserData = null;
-        if (unsubscribeCitizen) unsubscribeCitizen();
-        if (unsubscribeAdmin) unsubscribeAdmin();
-        switchView('landing');
+        switchView('citizen');
+        setupCitizenListener(user.uid);
+        showToast("Welcome, Citizen");
+    }
+}
+
+function handleUserLoggedOut() {
+    currentUserData = null;
+    cleanupListeners();
+    switchView('landing');
+}
+
+// Firebase auth state observer
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        handleUserLoggedIn(user);
+    } else {
+        handleUserLoggedOut();
     }
 });
 
-// Regular Login
+// =============================================
+// EVENT LISTENERS
+// =============================================
+
+// --- Citizen Google Login ---
 ui.btnGoogleLogin.addEventListener('click', async () => {
     try {
+        ui.btnGoogleLogin.disabled = true;
+        ui.btnGoogleLogin.style.opacity = '0.7';
         await signInWithPopup(auth, provider);
     } catch (error) {
         console.error("Login Error:", error);
-        showToast("Login failed. Please try again.", true);
+        if (error.code !== 'auth/popup-closed-by-user') {
+            showToast("Login failed: " + error.message, true);
+        }
+    } finally {
+        ui.btnGoogleLogin.disabled = false;
+        ui.btnGoogleLogin.style.opacity = '1';
     }
 });
 
-// Admin Auth Login/Registration
+// --- Admin Registration + Login ---
 ui.btnAdminGoogleLogin.addEventListener('click', async () => {
     const code = ui.adminAuthCode.value.trim();
-    if (code !== "CITYFIX_ADMIN_2024") { // Hardcoded demo code
+
+    // Validate authorization code
+    if (code !== "CITYFIX_ADMIN_2024") {
         ui.adminErrorMsg.textContent = "Invalid authorization code.";
         ui.adminErrorMsg.classList.remove('hidden');
         return;
     }
-    
+
     try {
         ui.adminErrorMsg.classList.add('hidden');
+        ui.btnAdminGoogleLogin.disabled = true;
+        ui.btnAdminGoogleLogin.style.opacity = '0.7';
+
+        // Set the flag BEFORE signing in so handleUserLoggedIn knows to treat as admin
+        pendingAdminRegistration = true;
+
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
-        
-        // Ensure user is in admins collection
+
+        // Write to admins collection
         await setDoc(doc(db, "admins", user.uid), {
             email: user.email,
+            displayName: user.displayName,
             registeredAt: serverTimestamp()
         }, { merge: true });
-        
+
+        // Close modal
         ui.modalAdmin.classList.add('hidden');
         ui.adminAuthCode.value = "";
-        
-        // onAuthStateChanged will handle routing
+
+        // If onAuthStateChanged already fired (user was already logged in),
+        // we need to manually re-route since the flag was set after
+        if (currentUserData && currentUserData.role !== 'admin') {
+            currentUserData.role = 'admin';
+            cleanupListeners();
+            switchView('admin');
+            setupAdminListener();
+            showToast("Admin access granted!");
+        }
+
     } catch (error) {
         console.error("Admin Login Error:", error);
-        ui.adminErrorMsg.textContent = error.message;
-        ui.adminErrorMsg.classList.remove('hidden');
+        pendingAdminRegistration = false;
+        if (error.code !== 'auth/popup-closed-by-user') {
+            ui.adminErrorMsg.textContent = error.message;
+            ui.adminErrorMsg.classList.remove('hidden');
+        }
+    } finally {
+        ui.btnAdminGoogleLogin.disabled = false;
+        ui.btnAdminGoogleLogin.style.opacity = '1';
     }
 });
 
+// --- Logout ---
 ui.btnLogout.addEventListener('click', () => {
     signOut(auth);
 });
 
-// Modal Toggles
+// --- Admin Modal ---
 ui.btnAdminPortal.addEventListener('click', () => {
     ui.modalAdmin.classList.remove('hidden');
 });
@@ -222,230 +320,227 @@ ui.closeModal.addEventListener('click', () => {
     ui.adminErrorMsg.classList.add('hidden');
 });
 
-// --- Feature: Geolocation ---
-ui.btnGeolocate.addEventListener('click', () => {
-    if ("geolocation" in navigator) {
-        ui.btnGeolocate.innerHTML = '<div class="loader" style="width:14px;height:14px;border-width:2px;border-top-color:var(--color-text-primary)"></div>';
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                document.getElementById('complaint-locality').value = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
-                ui.btnGeolocate.innerHTML = '✓';
-                setTimeout(() => {
-                    ui.btnGeolocate.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>';
-                }, 2000);
-            },
-            (error) => {
-                showToast("Location access denied or unavailable", true);
-                ui.btnGeolocate.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path></svg>';
-            }
-        );
-    } else {
-        showToast("Geolocation is not supported by your browser", true);
-    }
+// Close modal on backdrop click
+document.querySelector('.modal-backdrop')?.addEventListener('click', () => {
+    ui.modalAdmin.classList.add('hidden');
+    ui.adminErrorMsg.classList.add('hidden');
 });
 
-// --- Feature: Submit Complaint (Data Layer) ---
+// --- Geolocation ---
+ui.btnGeolocate.addEventListener('click', () => {
+    if (!("geolocation" in navigator)) {
+        showToast("Geolocation is not supported by your browser", true);
+        return;
+    }
+
+    const originalHTML = ui.btnGeolocate.innerHTML;
+    ui.btnGeolocate.innerHTML = '<div class="loader" style="width:14px;height:14px;border-width:2px;border-top-color:var(--color-text-primary)"></div>';
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            document.getElementById('complaint-locality').value =
+                `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
+            ui.btnGeolocate.innerHTML = '✓';
+            setTimeout(() => { ui.btnGeolocate.innerHTML = originalHTML; }, 2000);
+        },
+        () => {
+            showToast("Location access denied or unavailable", true);
+            ui.btnGeolocate.innerHTML = originalHTML;
+        }
+    );
+});
+
+// --- Submit Complaint ---
 ui.formComplaint.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentUserData) return;
 
-    ui.btnSubmitComplaint.querySelector('span').classList.add('hidden');
+    const submitSpan = ui.btnSubmitComplaint.querySelector('span');
+    submitSpan.classList.add('hidden');
     ui.submitLoader.classList.remove('hidden');
     ui.btnSubmitComplaint.disabled = true;
 
     try {
-        const newComplaint = {
-            city: document.getElementById('complaint-city').value,
-            locality: document.getElementById('complaint-locality').value,
+        await addDoc(collection(db, "complaints"), {
+            city: document.getElementById('complaint-city').value.trim(),
+            locality: document.getElementById('complaint-locality').value.trim(),
             priority: document.getElementById('complaint-priority').value,
-            description: document.getElementById('complaint-description').value,
+            description: document.getElementById('complaint-description').value.trim(),
             status: 'Pending',
             userId: currentUserData.uid,
             userEmail: currentUserData.email,
-            userName: currentUserData.displayName,
+            userName: currentUserData.displayName || 'Citizen',
             createdAt: serverTimestamp()
-        };
+        });
 
-        await addDoc(collection(db, "complaints"), newComplaint);
-        
         ui.formComplaint.reset();
-        showToast("Report submitted successfully");
+        showToast("Report submitted successfully!");
     } catch (error) {
-        console.error("Error submitting complaint: ", error);
-        showToast("Failed to submit report", true);
+        console.error("Error submitting complaint:", error);
+        showToast("Failed to submit report: " + error.message, true);
     } finally {
-        ui.btnSubmitComplaint.querySelector('span').classList.remove('hidden');
+        submitSpan.classList.remove('hidden');
         ui.submitLoader.classList.add('hidden');
         ui.btnSubmitComplaint.disabled = false;
     }
 });
 
-// --- Feature: Read Data (Real-time Listeners) ---
-
-function getStatusClass(status) {
-    if(status === 'Resolved') return 'status-resolved';
-    if(status === 'Rejected') return 'status-rejected';
-    return 'status-pending';
-}
-
-function getPriorityClass(priority) {
-    if(priority === 'High') return 'priority-high';
-    if(priority === 'Medium') return 'priority-medium';
-    return 'priority-low';
-}
-
-function formatDate(timestamp) {
-    if (!timestamp) return 'Just now';
-    const date = timestamp.toDate();
-    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute:'numeric' }).format(date);
-}
+// =============================================
+// DATA LISTENERS (Real-time Firestore)
+// =============================================
 
 function setupCitizenListener(uid) {
     if (unsubscribeCitizen) unsubscribeCitizen();
-    
+
     const q = query(
-        collection(db, "complaints"), 
+        collection(db, "complaints"),
         where("userId", "==", uid)
     );
 
-    unsubscribeCitizen = onSnapshot(q, (snapshot) => {
-        if (snapshot.empty) {
-            ui.citizenList.innerHTML = `<div class="loading-state"><p>You haven't filed any reports yet.</p></div>`;
-            return;
+    unsubscribeCitizen = onSnapshot(q,
+        (snapshot) => {
+            if (snapshot.empty) {
+                ui.citizenList.innerHTML = '<div class="loading-state"><p>You haven\'t filed any reports yet.</p></div>';
+                return;
+            }
+
+            // Client-side sort by date (newest first)
+            const sorted = [...snapshot.docs].sort((a, b) => {
+                const dA = a.data().createdAt?.toDate?.() || new Date(0);
+                const dB = b.data().createdAt?.toDate?.() || new Date(0);
+                return dB - dA;
+            });
+
+            ui.citizenList.innerHTML = sorted.map(docSnap => {
+                const d = docSnap.data();
+                return `
+                    <div class="glass-panel complaint-card ${getPriorityClass(d.priority)}">
+                        <div class="card-header">
+                            <span class="card-title">${d.city} — ${d.priority} Priority</span>
+                            <span class="status-badge ${getStatusClass(d.status)}">${d.status}</span>
+                        </div>
+                        <div class="card-location">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path></svg>
+                            ${d.locality}
+                        </div>
+                        <div class="card-desc">${d.description}</div>
+                        <div class="card-footer">
+                            <span>ID: ${docSnap.id.substring(0, 8).toUpperCase()}</span>
+                            <span>${formatDate(d.createdAt)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        },
+        (error) => {
+            console.error("Citizen data fetch error:", error);
+            ui.citizenList.innerHTML = `<div class="loading-state"><p style="color:var(--color-danger)">Error loading data: ${error.message}</p></div>`;
         }
-
-        let docsObj = snapshot.docs.sort((a,b) => {
-            const dateA = a.data().createdAt?.toDate() || new Date(0);
-            const dateB = b.data().createdAt?.toDate() || new Date(0);
-            return dateB - dateA;
-        });
-
-        ui.citizenList.innerHTML = docsObj.map(doc => {
-            const data = doc.data();
-            return `
-                <div class="glass-panel complaint-card ${getPriorityClass(data.priority)}">
-                    <div class="card-header">
-                        <span class="card-title">${data.city} - ${data.priority} Priority</span>
-                        <span class="status-badge ${getStatusClass(data.status)}">${data.status}</span>
-                    </div>
-                    <div class="card-location">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path></svg>
-                        ${data.locality}
-                    </div>
-                    <div class="card-desc">${data.description}</div>
-                    <div class="card-footer">
-                        <span>ID: ${doc.id.substring(0,8).toUpperCase()}</span>
-                        <span>${formatDate(data.createdAt)}</span>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }, (error) => {
-        // If index is missing initially, query might fail. We'll show an error but Firebase console will link the index creation.
-        console.error("Citizen data fetch error. This may require a Firestore composite index:", error);
-        ui.citizenList.innerHTML = `<div class="loading-state"><p style="color:var(--color-danger)">Error loading data. If deploying for the first time, check Firestore indexes.</p></div>`;
-    });
+    );
 }
 
 function setupAdminListener(sortMethod = 'date-desc') {
     if (unsubscribeAdmin) unsubscribeAdmin();
-    
-    let q;
-    const complaintsRef = collection(db, "complaints");
-    
-    // Simple sorts to avoid needing multiple composite indexes
-    q = query(complaintsRef); // Pull all and sort client-side to prevent complex index delays
 
-    unsubscribeAdmin = onSnapshot(q, (snapshot) => {
-        if (snapshot.empty) {
-            ui.adminList.innerHTML = `<tr><td colspan="7" class="text-center py-4">No reports found in the system.</td></tr>`;
-            return;
+    // Fetch ALL complaints (no server-side ordering to avoid index requirements)
+    const q = query(collection(db, "complaints"));
+
+    unsubscribeAdmin = onSnapshot(q,
+        (snapshot) => {
+            if (snapshot.empty) {
+                ui.adminList.innerHTML = '<tr><td colspan="7" class="text-center py-4">No reports found in the system.</td></tr>';
+                return;
+            }
+
+            // Client-side sorting
+            let docs = [...snapshot.docs];
+
+            if (sortMethod === 'priority') {
+                const pMap = { 'High': 3, 'Medium': 2, 'Low': 1 };
+                docs.sort((a, b) => (pMap[b.data().priority] || 0) - (pMap[a.data().priority] || 0));
+            } else if (sortMethod === 'date-asc') {
+                docs.sort((a, b) => {
+                    const dA = a.data().createdAt?.toDate?.() || new Date(0);
+                    const dB = b.data().createdAt?.toDate?.() || new Date(0);
+                    return dA - dB;
+                });
+            } else {
+                // date-desc (default)
+                docs.sort((a, b) => {
+                    const dA = a.data().createdAt?.toDate?.() || new Date(0);
+                    const dB = b.data().createdAt?.toDate?.() || new Date(0);
+                    return dB - dA;
+                });
+            }
+
+            ui.adminList.innerHTML = docs.map(docSnap => {
+                const d = docSnap.data();
+                const id = docSnap.id;
+                const priorityColor = d.priority === 'High' ? 'var(--color-danger)' :
+                                      d.priority === 'Medium' ? 'var(--color-warning)' : 'var(--color-success)';
+                return `
+                    <tr>
+                        <td>
+                            <div style="font-size:0.85em; color:var(--color-text-secondary); margin-bottom:4px;">${id.substring(0, 8).toUpperCase()}</div>
+                            ${formatDate(d.createdAt)}
+                        </td>
+                        <td>
+                            <div style="font-weight:500">${d.userName || 'Citizen'}</div>
+                            <div style="font-size:0.8em; color:var(--color-text-secondary)">${d.userEmail || ''}</div>
+                        </td>
+                        <td>
+                            <div style="font-weight:500">${d.city || ''}</div>
+                            <div style="font-size:0.85em; color:var(--color-text-secondary)">${d.locality || ''}</div>
+                        </td>
+                        <td>
+                            <div style="max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${d.description || ''}">${d.description || ''}</div>
+                        </td>
+                        <td><span style="color:${priorityColor}; font-weight:600;">${d.priority}</span></td>
+                        <td><span class="status-badge ${getStatusClass(d.status)}">${d.status}</span></td>
+                        <td>
+                            <select class="status-update" data-id="${id}" data-current="${d.status}">
+                                <option value="Pending" ${d.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                <option value="Resolved" ${d.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
+                                <option value="Rejected" ${d.status === 'Rejected' ? 'selected' : ''}>Rejected</option>
+                            </select>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Attach change listeners to status dropdowns
+            document.querySelectorAll('.status-update').forEach(sel => {
+                sel.addEventListener('change', async (e) => {
+                    const docId = e.target.dataset.id;
+                    const newStatus = e.target.value;
+                    const originalStatus = e.target.dataset.current;
+                    if (newStatus === originalStatus) return;
+
+                    try {
+                        e.target.disabled = true;
+                        await updateDoc(doc(db, "complaints", docId), {
+                            status: newStatus,
+                            updatedAt: serverTimestamp()
+                        });
+                        showToast(`Status updated to ${newStatus}`);
+                    } catch (err) {
+                        console.error("Update error:", err);
+                        showToast("Failed to update status", true);
+                        e.target.value = originalStatus;
+                    } finally {
+                        e.target.disabled = false;
+                    }
+                });
+            });
+        },
+        (error) => {
+            console.error("Admin data fetch error:", error);
+            ui.adminList.innerHTML = `<tr><td colspan="7" class="text-center py-4" style="color:var(--color-danger)">Permission Error: Update your Firestore Security Rules to allow reads on the "complaints" collection.</td></tr>`;
         }
-
-        let docs = snapshot.docs;
-        
-        // Client-side priority and date soft if requested
-        if (sortMethod === 'priority') {
-            const priorityMap = { 'High': 3, 'Medium': 2, 'Low': 1 };
-            docs = docs.sort((a,b) => {
-                const pA = priorityMap[a.data().priority] || 0;
-                const pB = priorityMap[b.data().priority] || 0;
-                return pB - pA;
-            });
-        } else if (sortMethod === 'date-desc') {
-            docs = docs.sort((a,b) => {
-                const dateA = a.data().createdAt?.toDate() || new Date(0);
-                const dateB = b.data().createdAt?.toDate() || new Date(0);
-                return dateB - dateA;
-            });
-        } else if (sortMethod === 'date-asc') {
-            docs = docs.sort((a,b) => {
-                const dateA = a.data().createdAt?.toDate() || new Date(0);
-                const dateB = b.data().createdAt?.toDate() || new Date(0);
-                return dateA - dateB;
-            });
-        }
-
-        ui.adminList.innerHTML = docs.map(docSnap => {
-            const data = docSnap.data();
-            const id = docSnap.id;
-            return `
-                <tr>
-                    <td>
-                        <div style="font-size:0.85em; color:var(--color-text-secondary); margin-bottom:4px;">${id.substring(0,8).toUpperCase()}</div>
-                        ${formatDate(data.createdAt)}
-                    </td>
-                    <td>
-                        <div style="font-weight:500">${data.userName || 'Citizen'}</div>
-                        <div style="font-size:0.8em; color:var(--color-text-secondary)">${data.userEmail}</div>
-                    </td>
-                    <td><div style="font-weight:500">${data.city}</div><div style="font-size:0.85em; color:var(--color-text-secondary)">${data.locality}</div></td>
-                    <td><div style="max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${data.description}">${data.description}</div></td>
-                    <td><span style="color: ${data.priority==='High'?'var(--color-danger)':data.priority==='Medium'?'var(--color-warning)':'var(--color-success)'}; font-weight:600;">${data.priority}</span></td>
-                    <td><span class="status-badge ${getStatusClass(data.status)}">${data.status}</span></td>
-                    <td>
-                        <select class="status-update" data-id="${id}" data-current="${data.status}">
-                            <option value="Pending" ${data.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                            <option value="Resolved" ${data.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
-                            <option value="Rejected" ${data.status === 'Rejected' ? 'selected' : ''}>Rejected</option>
-                        </select>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-        
-        // Attach listeners to new selects
-        document.querySelectorAll('.status-update').forEach(select => {
-            select.addEventListener('change', async (e) => {
-                const docId = e.target.dataset.id;
-                const newStatus = e.target.value;
-                const originalStatus = e.target.dataset.current;
-                
-                if (newStatus === originalStatus) return;
-                
-                try {
-                    e.target.disabled = true;
-                    await updateDoc(doc(db, "complaints", docId), {
-                        status: newStatus,
-                        updatedAt: serverTimestamp()
-                    });
-                    showToast(`Status updated to ${newStatus}`);
-                } catch (err) {
-                    console.error("Update error:", err);
-                    showToast("Failed to update status", true);
-                    e.target.value = originalStatus; // revert visual
-                } finally {
-                    e.target.disabled = false;
-                }
-            });
-        });
-    }, (error) => {
-        console.error("Admin data fetch error:", error);
-        ui.adminList.innerHTML = `<tr><td colspan="7" class="text-center py-4" style="color:var(--color-danger)">Firebase Permission Error. Please check your Firestore Security Rules to allow reading the 'complaints' collection.</td></tr>`;
-    });
+    );
 }
 
-// Admin Sorting Event
+// --- Admin Sort Control ---
 ui.sortAdmin.addEventListener('change', (e) => {
     setupAdminListener(e.target.value);
 });
