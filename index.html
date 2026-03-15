@@ -1,484 +1,240 @@
-// ══════════════════════════════════════════════════════
-//  CITY FIX – app.js  (Realtime Database, no Storage)
-// ══════════════════════════════════════════════════════
-import { initializeApp }
-  from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getAnalytics }
-  from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
-import {
-  getAuth, GoogleAuthProvider,
-  signInWithPopup, signOut, onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
-import {
-  getDatabase, ref, push, update, get, onValue, query, orderByChild
-} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CityFix | Municipal Complaint Platform</title>
+  <meta name="description" content="CityFix bridges the gap between citizens and the municipality. Submit, track, and resolve local infrastructure issues.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
 
-// ─── Config ────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey:            "AIzaSyCQ1cc8A2Vd0MWHYYd891c-dh2VWv5hFtA",
-  authDomain:        "cityfix-12f8e.firebaseapp.com",
-  databaseURL:       "https://cityfix-12f8e-default-rtdb.firebaseio.com",
-  projectId:         "cityfix-12f8e",
-  storageBucket:     "cityfix-12f8e.firebasestorage.app",
-  messagingSenderId: "668200888655",
-  appId:             "1:668200888655:web:8798edf0179a8fa4e4fd3a"
-};
+  <!-- ═══ Loading Overlay ═══ -->
+  <div id="loading-overlay" class="overlay">
+    <div class="spinner-large"></div>
+    <span>Loading CityFix…</span>
+  </div>
 
-const app  = initializeApp(firebaseConfig);
-getAnalytics(app);
-const auth = getAuth(app);
-const db   = getDatabase(app);
+  <!-- ═══ VIEW: Landing ═══ -->
+  <section id="view-landing" class="view-section" style="display:none">
+    <div class="landing-bg">
+      <div class="hero-blob blob1"></div>
+      <div class="hero-blob blob2"></div>
+    </div>
 
-// ─── Helpers ────────────────────────────────────────────
-const el = id => document.getElementById(id);
+    <nav class="landing-nav">
+      <div class="logo">🏙️ <span>City<strong>Fix</strong></span></div>
+    </nav>
 
-/** Show/hide top-level views */
-function showView(which) {
-  el('loading-overlay').style.display = 'none';
-  el('view-landing').style.display    = (which === 'landing') ? 'flex'  : 'none';
-  el('view-app').style.display        = (which === 'app')     ? 'flex'  : 'none';
-}
+    <div class="hero">
+      <span class="hero-badge">🚀 Civic Tech Platform</span>
+      <h1>Your City, <span class="gradient-text">Your Voice</span></h1>
+      <p class="hero-sub">Report municipal issues, track resolutions, and hold your city accountable — all from one place.</p>
 
-/** Show a panel inside the app shell */
-function showPanel(id) {
-  ['panel-feed','panel-new','panel-admin','panel-stats'].forEach(pid => {
-    el(pid).style.display = (pid === id) ? 'flex' : 'none';
-  });
-}
-
-/** Highlight the active sidebar button */
-function setActiveNav(targetBtn) {
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  if (targetBtn) targetBtn.classList.add('active');
-}
-
-/** Toast notification */
-function toast(msg, type = 'info') {
-  const t = el('toast');
-  t.textContent = msg;
-  t.className   = `toast ${type}`;
-  t.style.display = 'block';
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.style.display = 'none'; }, 3600);
-}
-
-function fmtDate(ts) {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
-}
-
-function initials(name = '') {
-  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
-}
-
-function priorityClass(p) {
-  return p === 'High' ? 'High' : p === 'Medium' ? 'Medium' : 'Low';
-}
-
-function statusCSSClass(s) {
-  return (s || '').replace(' ', '-');
-}
-
-// ─── State ──────────────────────────────────────────────
-let currentUser   = null;
-let currentRole   = 'citizen';
-let wantAdminRole = false;      // set by which login button was clicked
-let feedUnsub     = null;       // unsubscribe fn for citizen feed listener
-let adminUnsub    = null;       // unsubscribe fn for admin listener
-
-// ─── Landing stats (public, runs always) ────────────────
-onValue(ref(db, 'complaints'), snap => {
-  const all = snap.val() ? Object.values(snap.val()) : [];
-  el('stat-total').textContent    = all.length;
-  el('stat-resolved').textContent = all.filter(c => c.status === 'Resolved').length;
-  el('stat-pending').textContent  = all.filter(c => c.status === 'Pending').length;
-});
-
-// ─── Auth ────────────────────────────────────────────────
-el('btn-citizen-login').addEventListener('click', () => loginWith(false));
-el('btn-admin-login').addEventListener('click',   () => loginWith(true));
-el('btn-logout').addEventListener('click', () => signOut(auth));
-
-async function loginWith(asAdmin) {
-  wantAdminRole = asAdmin;
-  try {
-    await signInWithPopup(auth, new GoogleAuthProvider());
-  } catch (e) {
-    toast('Login failed: ' + e.message, 'error');
-  }
-}
-
-onAuthStateChanged(auth, async user => {
-  if (user) {
-    currentUser = user;
-    await resolveRole(user);
-    bootApp();
-  } else {
-    currentUser = null;
-    currentRole = 'citizen';
-    // Detach any listeners
-    if (feedUnsub)  { feedUnsub();  feedUnsub  = null; }
-    if (adminUnsub) { adminUnsub(); adminUnsub = null; }
-    showView('landing');
-  }
-});
-
-async function resolveRole(user) {
-  // If user clicked "Admin" login button, write admin role first
-  if (wantAdminRole) {
-    await update(ref(db, `users/${user.uid}`), {
-      role: 'admin', email: user.email, name: user.displayName
-    });
-    wantAdminRole = false;
-  }
-
-  // Read role from DB
-  const snap = await get(ref(db, `users/${user.uid}/role`));
-  if (snap.exists()) {
-    currentRole = snap.val(); // 'admin' | 'citizen'
-  } else {
-    // First-ever login → default citizen
-    await update(ref(db, `users/${user.uid}`), {
-      role: 'citizen', email: user.email, name: user.displayName
-    });
-    currentRole = 'citizen';
-  }
-}
-
-function bootApp() {
-  // Update sidebar user info
-  const name = currentUser.displayName || currentUser.email || 'User';
-  el('user-avatar').textContent    = initials(name);
-  el('user-name').textContent      = name.split(' ')[0];
-  el('user-role-label').textContent = currentRole === 'admin' ? 'Admin' : 'Citizen';
-  el('user-role-label').className  = 'user-role-badge' + (currentRole === 'admin' ? ' admin' : '');
-
-  // Show correct sidebar nav
-  el('citizen-nav').style.display = currentRole === 'citizen' ? 'flex' : 'none';
-  el('admin-nav').style.display   = currentRole === 'admin'   ? 'flex' : 'none';
-
-  // Route to first panel
-  if (currentRole === 'admin') {
-    showPanel('panel-admin');
-    highlightNav('panel-admin');
-    subscribeAdmin();
-    subscribeAdminStats();
-  } else {
-    showPanel('panel-feed');
-    highlightNav('panel-feed');
-    subscribeFeed();
-  }
-
-  showView('app');
-}
-
-function highlightNav(panelId) {
-  const btn = document.querySelector(`.nav-item[data-panel="${panelId}"]`);
-  setActiveNav(btn);
-}
-
-// ─── Sidebar Nav ─────────────────────────────────────────
-document.querySelectorAll('.nav-item').forEach(btn => {
-  btn.addEventListener('click', () => {
-    showPanel(btn.dataset.panel);
-    setActiveNav(btn);
-  });
-});
-
-// "New Report" shortcut from feed header
-el('btn-goto-new').addEventListener('click', () => {
-  showPanel('panel-new');
-  highlightNav('panel-new');
-});
-
-// ─── Geolocation ─────────────────────────────────────────
-el('btn-geolocate').addEventListener('click', () => {
-  const iconEl = el('geo-icon');
-  iconEl.textContent = '⏳';
-  if (!navigator.geolocation) {
-    toast('Geolocation not supported by your browser.', 'error');
-    iconEl.textContent = '📍';
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      el('comp-location').value = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
-      iconEl.textContent = '✅';
-    },
-    () => {
-      toast('Location access denied or unavailable.', 'error');
-      iconEl.textContent = '📍';
-    }
-  );
-});
-
-// ─── Clear Form ──────────────────────────────────────────
-el('btn-clear-form').addEventListener('click', () => {
-  el('form-complaint').reset();
-  el('geo-icon').textContent = '📍';
-  ['err-category','err-priority','err-address','err-desc'].forEach(id => {
-    el(id).textContent = '';
-  });
-});
-
-// ─── Submit Report ────────────────────────────────────────
-el('form-complaint').addEventListener('submit', async e => {
-  e.preventDefault();
-  if (!validateForm()) return;
-
-  const submitBtn   = el('btn-submit-complaint');
-  const labelEl     = el('submit-label');
-  const spinnerEl   = el('submit-spinner');
-  submitBtn.disabled = true;
-  labelEl.style.display   = 'none';
-  spinnerEl.style.display = 'inline-block';
-
-  const complaint = {
-    uid:         currentUser.uid,
-    email:       currentUser.email,
-    displayName: currentUser.displayName || currentUser.email,
-    category:    el('comp-category').value,
-    priority:    el('comp-priority').value,
-    address:     el('comp-address').value.trim(),
-    location:    el('comp-location').value.trim(),
-    description: el('comp-description').value.trim(),
-    status:      'Pending',
-    createdAt:   Date.now()
-  };
-
-  try {
-    await push(ref(db, 'complaints'), complaint);
-    toast('✅ Report submitted successfully!', 'success');
-    el('form-complaint').reset();
-    el('geo-icon').textContent = '📍';
-    showPanel('panel-feed');
-    highlightNav('panel-feed');
-  } catch (err) {
-    console.error('Submit error:', err);
-    toast('Submission failed: ' + err.message, 'error');
-  } finally {
-    submitBtn.disabled      = false;
-    labelEl.style.display   = 'inline';
-    spinnerEl.style.display = 'none';
-  }
-});
-
-function validateForm() {
-  const rules = [
-    ['comp-category',    'err-category', 'Please select a category'],
-    ['comp-priority',    'err-priority', 'Please select a priority'],
-    ['comp-address',     'err-address',  'Please enter an address'],
-    ['comp-description', 'err-desc',     'Please describe the issue'],
-  ];
-  let ok = true;
-  rules.forEach(([fieldId, errId, msg]) => {
-    const field = el(fieldId);
-    const errEl = el(errId);
-    if (!field.value.trim()) {
-      errEl.textContent = msg;
-      ok = false;
-    } else {
-      errEl.textContent = '';
-    }
-  });
-  return ok;
-}
-
-// ─── Citizen Feed (real-time) ─────────────────────────────
-let feedCache = [];
-
-function subscribeFeed() {
-  if (feedUnsub) { feedUnsub(); feedUnsub = null; }
-
-  const q = query(ref(db, 'complaints'), orderByChild('createdAt'));
-  feedUnsub = onValue(q, snap => {
-    feedCache = [];
-    snap.forEach(child => feedCache.push({ id: child.key, ...child.val() }));
-    // Newest first, and only this user's reports
-    feedCache = feedCache.filter(c => c.uid === currentUser.uid).reverse();
-    applyFeedFilters();
-  });
-
-  // Attach filter listeners (only once)
-  el('feed-filter-status').onchange   = applyFeedFilters;
-  el('feed-filter-priority').onchange = applyFeedFilters;
-}
-
-function applyFeedFilters() {
-  const st = el('feed-filter-status').value;
-  const pr = el('feed-filter-priority').value;
-  const list = feedCache.filter(c =>
-    (!st || c.status === st) && (!pr || c.priority === pr)
-  );
-  renderFeed(list);
-}
-
-function renderFeed(data) {
-  const container = el('feed-list');
-  container.innerHTML = '';
-
-  if (!data.length) {
-    container.innerHTML = '<div class="empty-state">No reports found. Use "+ New Report" to file one!</div>';
-    return;
-  }
-
-  data.forEach(c => {
-    const card = document.createElement('div');
-    card.className = 'complaint-card';
-    card.innerHTML = `
-      <div class="card-top">
-        <span class="card-category">${c.category || '—'}</span>
-        <span class="priority-pill ${priorityClass(c.priority)}">${c.priority || '—'}</span>
+      <div class="hero-actions">
+        <button id="btn-citizen-login" class="btn btn-primary btn-lg">
+          <svg viewBox="0 0 24 24" width="20" height="20" style="flex-shrink:0"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/></svg>
+          Sign in as Citizen
+        </button>
+        <button id="btn-admin-login" class="btn btn-outline btn-lg">🔑 Sign in as Admin</button>
       </div>
-      <p class="card-desc">${c.description || ''}</p>
-      <p class="card-addr">📍 ${c.address || ''}${c.location ? ' &middot; <small>' + c.location + '</small>' : ''}</p>
-      <div class="card-footer">
-        <span class="status-pill ${statusCSSClass(c.status)}">${c.status || 'Pending'}</span>
-        <span class="card-date">${fmtDate(c.createdAt)}</span>
-      </div>`;
-    container.appendChild(card);
-  });
-}
 
-// ─── Admin: All Issues (real-time) ───────────────────────
-let adminCache = [];
+      <div class="hero-stats">
+        <div class="stat"><span id="stat-total">0</span><small>Total Reports</small></div>
+        <div class="stat"><span id="stat-resolved">0</span><small>Resolved</small></div>
+        <div class="stat"><span id="stat-pending">0</span><small>Pending</small></div>
+      </div>
+    </div>
+  </section>
 
-function subscribeAdmin() {
-  if (adminUnsub) { adminUnsub(); adminUnsub = null; }
+  <!-- ═══ VIEW: App Shell (Sidebar + Main) ═══ -->
+  <section id="view-app" class="view-section app-shell" style="display:none">
 
-  const q = query(ref(db, 'complaints'), orderByChild('createdAt'));
-  adminUnsub = onValue(q, snap => {
-    adminCache = [];
-    snap.forEach(child => adminCache.push({ id: child.key, ...child.val() }));
-    adminCache.reverse();  // newest first
-    el('admin-count-badge').textContent = adminCache.length;
-    applyAdminFilters();
-  });
+    <!-- ─── Sidebar ─── -->
+    <aside id="sidebar">
+      <div class="sidebar-logo">🏙️ <span>City<strong>Fix</strong></span></div>
 
-  el('admin-filter-status').onchange = applyAdminFilters;
-  el('admin-sort').onchange          = applyAdminFilters;
-}
+      <nav class="sidebar-nav">
+        <!-- Citizen Nav -->
+        <div id="citizen-nav" class="nav-group" style="display:none">
+          <button class="nav-item active" data-panel="panel-feed">📋 My Reports</button>
+          <button class="nav-item" data-panel="panel-new">➕ New Report</button>
+        </div>
+        <!-- Admin Nav -->
+        <div id="admin-nav" class="nav-group" style="display:none">
+          <button class="nav-item active" data-panel="panel-admin">📊 All Issues</button>
+          <button class="nav-item" data-panel="panel-stats">📈 Statistics</button>
+        </div>
+      </nav>
 
-const PRIO = { High: 3, Medium: 2, Low: 1 };
+      <div class="sidebar-footer">
+        <div id="user-avatar" class="avatar">?</div>
+        <div class="user-meta">
+          <span id="user-name" class="user-name-text">User</span>
+          <span id="user-role-label" class="user-role-badge">Citizen</span>
+        </div>
+        <button id="btn-logout" class="btn-icon" title="Sign out">🚪</button>
+      </div>
+    </aside>
 
-function applyAdminFilters() {
-  const st   = el('admin-filter-status').value;
-  const sort = el('admin-sort').value;
+    <!-- ─── Main Content ─── -->
+    <main id="main-content">
 
-  let data = st ? adminCache.filter(c => c.status === st) : [...adminCache];
+      <!-- ══ Panel: My Reports (Feed) ══ -->
+      <div id="panel-feed" class="panel" style="display:none">
+        <div class="panel-header">
+          <h2>📋 My Reports</h2>
+          <div class="header-controls">
+            <button id="btn-goto-new" class="btn btn-primary">+ New Report</button>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <select id="feed-filter-status">
+            <option value="">All Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Resolved">Resolved</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+          <select id="feed-filter-priority">
+            <option value="">All Priorities</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </div>
+        <div id="feed-list" class="card-grid">
+          <div class="empty-state">Loading your reports…</div>
+        </div>
+      </div>
 
-  data.sort((a, b) => {
-    switch (sort) {
-      case 'date-asc':      return a.createdAt - b.createdAt;
-      case 'priority-desc': return (PRIO[b.priority] || 0) - (PRIO[a.priority] || 0);
-      case 'priority-asc':  return (PRIO[a.priority] || 0) - (PRIO[b.priority] || 0);
-      default:              return b.createdAt - a.createdAt; // date-desc
-    }
-  });
+      <!-- ══ Panel: New Report ══ -->
+      <div id="panel-new" class="panel" style="display:none">
+        <div class="panel-header">
+          <h2>➕ File a New Report</h2>
+        </div>
+        <form id="form-complaint" class="form-card">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="comp-category">Category</label>
+              <select id="comp-category">
+                <option value="">— Select —</option>
+                <option value="Roads & Potholes">Roads & Potholes</option>
+                <option value="Water Supply">Water Supply</option>
+                <option value="Sewage & Drainage">Sewage & Drainage</option>
+                <option value="Streetlights">Streetlights</option>
+                <option value="Garbage & Sanitation">Garbage & Sanitation</option>
+                <option value="Public Safety">Public Safety</option>
+                <option value="Electricity">Electricity</option>
+                <option value="Other">Other</option>
+              </select>
+              <span id="err-category" class="err"></span>
+            </div>
+            <div class="form-group">
+              <label for="comp-priority">Priority</label>
+              <select id="comp-priority">
+                <option value="">— Select —</option>
+                <option value="Low">Low — Minor issue</option>
+                <option value="Medium">Medium — Needs attention</option>
+                <option value="High">High — Urgent / Safety risk</option>
+              </select>
+              <span id="err-priority" class="err"></span>
+            </div>
+          </div>
 
-  renderAdminTable(data);
-}
+          <div class="form-group">
+            <label for="comp-address">Address / Landmark</label>
+            <input type="text" id="comp-address" placeholder="e.g. MG Road, Sector 12, Near City Mall">
+            <span id="err-address" class="err"></span>
+          </div>
 
-function renderAdminTable(data) {
-  const wrap = el('admin-list');
-  wrap.innerHTML = '';
+          <div class="form-group">
+            <label for="comp-location">GPS Coordinates <span class="label-opt">(optional)</span></label>
+            <div class="geo-row">
+              <input type="text" id="comp-location" placeholder="Tap 📍 to auto-detect" readonly>
+              <button type="button" id="btn-geolocate" class="btn btn-outline"><span id="geo-icon">📍</span></button>
+            </div>
+          </div>
 
-  if (!data.length) {
-    wrap.innerHTML = '<div class="empty-state">No issues found.</div>';
-    return;
-  }
+          <div class="form-group">
+            <label for="comp-description">Description</label>
+            <textarea id="comp-description" rows="4" placeholder="Describe the issue in detail…"></textarea>
+            <span id="err-desc" class="err"></span>
+          </div>
 
-  const table = document.createElement('table');
-  table.className = 'issues-table';
+          <div class="form-actions">
+            <button type="submit" id="btn-submit-complaint" class="btn btn-primary btn-lg">
+              <span id="submit-label">Submit Report</span>
+              <span id="submit-spinner" class="spinner" style="display:none"></span>
+            </button>
+            <button type="button" id="btn-clear-form" class="btn btn-ghost">Clear</button>
+          </div>
+        </form>
+      </div>
 
-  const thead = document.createElement('thead');
-  thead.innerHTML = `<tr>
-    <th>Date</th>
-    <th>Reporter</th>
-    <th>Category</th>
-    <th>Priority</th>
-    <th>Address</th>
-    <th>Description</th>
-    <th>Status</th>
-    <th>Update Status</th>
-  </tr>`;
-  table.appendChild(thead);
+      <!-- ══ Panel: Admin — All Issues ══ -->
+      <div id="panel-admin" class="panel" style="display:none">
+        <div class="panel-header">
+          <h2>📊 All Issues <span id="admin-count-badge" class="badge">0</span></h2>
+          <div class="header-controls">
+            <select id="admin-filter-status">
+              <option value="">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Resolved">Resolved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+            <select id="admin-sort">
+              <option value="date-desc">Newest First</option>
+              <option value="date-asc">Oldest First</option>
+              <option value="priority-desc">Highest Priority</option>
+              <option value="priority-asc">Lowest Priority</option>
+            </select>
+          </div>
+        </div>
+        <div id="admin-list" class="issues-table-wrap">
+          <div class="empty-state">Loading issues…</div>
+        </div>
+      </div>
 
-  const tbody = document.createElement('tbody');
-  data.forEach(c => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${fmtDate(c.createdAt)}</td>
-      <td>${c.displayName || c.email || '—'}</td>
-      <td>${c.category || '—'}</td>
-      <td><span class="priority-pill ${priorityClass(c.priority)}">${c.priority || '—'}</span></td>
-      <td>${c.address || '—'}${c.location ? '<br><small style="color:var(--text-dim)">' + c.location + '</small>' : ''}</td>
-      <td>${c.description || '—'}</td>
-      <td><span class="status-pill ${statusCSSClass(c.status)}">${c.status || 'Pending'}</span></td>
-      <td style="white-space:nowrap">
-        <select class="status-select-inline">
-          <option ${c.status === 'Pending'     ? 'selected' : ''}>Pending</option>
-          <option ${c.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-          <option ${c.status === 'Resolved'    ? 'selected' : ''}>Resolved</option>
-          <option ${c.status === 'Rejected'    ? 'selected' : ''}>Rejected</option>
-        </select>
-        <button class="btn-update" data-id="${c.id}">Save</button>
-      </td>`;
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  wrap.appendChild(table);
+      <!-- ══ Panel: Admin — Statistics ══ -->
+      <div id="panel-stats" class="panel" style="display:none">
+        <div class="panel-header">
+          <h2>📈 Statistics</h2>
+        </div>
+        <div class="stats-grid">
+          <div id="sc-total" class="stat-card">
+            <span class="sc-num">0</span>
+            <span class="sc-lbl">Total Issues</span>
+          </div>
+          <div id="sc-pending" class="stat-card">
+            <span class="sc-num">0</span>
+            <span class="sc-lbl">Pending</span>
+          </div>
+          <div id="sc-progress" class="stat-card">
+            <span class="sc-num">0</span>
+            <span class="sc-lbl">In Progress</span>
+          </div>
+          <div id="sc-resolved" class="stat-card">
+            <span class="sc-num">0</span>
+            <span class="sc-lbl">Resolved</span>
+          </div>
+        </div>
+        <div class="chart-section">
+          <h3>Issues by Category</h3>
+          <div id="category-bars" class="bar-chart">
+            <div class="empty-state">No data yet.</div>
+          </div>
+        </div>
+      </div>
 
-  // Single delegated listener on tbody (re-mounted each render, so no duplicates)
-  tbody.addEventListener('click', async e => {
-    const btn = e.target.closest('.btn-update');
-    if (!btn) return;
-    const id  = btn.dataset.id;
-    const sel = btn.previousElementSibling; // the <select> before the button
-    if (!sel) return;
-    btn.textContent = '…';
-    btn.disabled = true;
-    try {
-      await update(ref(db, `complaints/${id}`), { status: sel.value });
-      toast('Status updated ✅', 'success');
-    } catch (err) {
-      toast('Update failed: ' + err.message, 'error');
-    } finally {
-      btn.textContent = 'Save';
-      btn.disabled = false;
-    }
-  });
-}
+    </main>
+  </section>
 
-// ─── Admin Stats (real-time) ──────────────────────────────
-function subscribeAdminStats() {
-  onValue(ref(db, 'complaints'), snap => {
-    const all = [];
-    snap.forEach(c => all.push(c.val()));
+  <!-- ═══ Toast ═══ -->
+  <div id="toast" class="toast" style="display:none"></div>
 
-    el('sc-total').querySelector('.sc-num').textContent    = all.length;
-    el('sc-pending').querySelector('.sc-num').textContent  = all.filter(c => c.status === 'Pending').length;
-    el('sc-progress').querySelector('.sc-num').textContent = all.filter(c => c.status === 'In Progress').length;
-    el('sc-resolved').querySelector('.sc-num').textContent = all.filter(c => c.status === 'Resolved').length;
-
-    // Category bar chart
-    const cats = {};
-    all.forEach(c => { if (c.category) cats[c.category] = (cats[c.category] || 0) + 1; });
-    const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
-    const max = sorted[0]?.[1] || 1;
-    const barsEl = el('category-bars');
-    barsEl.innerHTML = '';
-    sorted.forEach(([cat, count]) => {
-      const row = document.createElement('div');
-      row.className = 'bar-row';
-      row.innerHTML = `
-        <span class="bar-label">${cat}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.round(count / max * 100)}%"></div></div>
-        <span class="bar-count">${count}</span>`;
-      barsEl.appendChild(row);
-    });
-  });
-}
+  <!-- ═══ Scripts ═══ -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
