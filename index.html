@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CityFix | Premium Municipal Service</title>
+    <title>CityFix | Municipal Complaint Platform</title>
+    <meta name="description" content="CityFix bridges the gap between citizens and the municipality. Submit, track, and resolve local infrastructure issues seamlessly.">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,13 +18,14 @@
     <div class="bg-shape shape-2"></div>
     <div class="bg-shape shape-3"></div>
 
+    <!-- ========== HEADER ========== -->
     <header class="main-header glass-panel">
         <div class="header-container">
             <h1 class="logo">City<span>Fix</span></h1>
             <nav id="nav-actions">
                 <button id="btn-admin-portal" class="btn btn-text">Admin Access</button>
                 <div id="user-profile" class="hidden">
-                    <img id="user-avatar" src="" alt="User" class="avatar">
+                    <img id="user-avatar" src="" alt="User Avatar" class="avatar">
                     <span id="user-name" class="name"></span>
                     <button id="btn-logout" class="btn btn-outline btn-small">Sign Out</button>
                 </div>
@@ -31,16 +33,18 @@
         </div>
     </header>
 
+    <!-- ========== MAIN CONTENT ========== -->
     <main class="main-content">
-        <!-- Landing / Login View -->
-        <section id="view-landing" class="view-section active fade-in">
+
+        <!-- ===== VIEW: Landing / Login ===== -->
+        <section id="view-landing" class="view-section active">
             <div class="landing-grid">
                 <div class="landing-text">
                     <h2 class="hero-title">Elevating <span>Civic</span> Responsibility.</h2>
                     <p class="hero-subtitle">CityFix bridges the gap between citizens and the municipality. Submitting, tracking, and resolving local infrastructure issues has never been this seamless.</p>
                     
                     <div class="quote-card glass-panel">
-                        <div class="quote-icon">❝</div>
+                        <div class="quote-icon">&#10077;</div>
                         <p>"A thriving city is built on the proactive engagement of its people."</p>
                     </div>
                 </div>
@@ -50,7 +54,7 @@
                         <h3>Citizen Portal</h3>
                         <p>Sign in to file and track your reports.</p>
                         <button id="btn-google-login" class="btn btn-google">
-                            <svg viewBox="0 0 24 24" class="google-icon">
+                            <svg viewBox="0 0 24 24" class="google-icon" aria-hidden="true">
                                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -63,8 +67,8 @@
             </div>
         </section>
 
-        <!-- Citizen Dashboard View -->
-        <section id="view-citizen-dashboard" class="view-section hidden fade-in">
+        <!-- ===== VIEW: Citizen Dashboard ===== -->
+        <section id="view-citizen-dashboard" class="view-section hidden">
             <header class="dashboard-header">
                 <h2>Your <span>Dashboard</span></h2>
                 <p>Submit new issues or monitor the status of your active reports.</p>
@@ -80,7 +84,7 @@
                                 <label for="complaint-city">City</label>
                                 <input type="text" id="complaint-city" placeholder="e.g. Metropolis" required>
                             </div>
-                            <div class="form-group half relative">
+                            <div class="form-group half">
                                 <label for="complaint-locality">Locality</label>
                                 <div class="input-with-btn">
                                     <input type="text" id="complaint-locality" placeholder="Sector, Street, or Coordinates" required>
@@ -120,7 +124,6 @@
                         <h3>Recent Activity</h3>
                     </div>
                     <div id="citizen-complaints-list" class="complaints-list">
-                        <!-- JS injects cards here -->
                         <div class="loading-state">
                             <div class="spinner"></div>
                             <p>Loading your reports...</p>
@@ -130,9 +133,9 @@
             </div>
         </section>
 
-        <!-- Admin Dashboard View -->
-        <section id="view-admin-dashboard" class="view-section hidden fade-in">
-             <header class="dashboard-header flex-between">
+        <!-- ===== VIEW: Admin Dashboard ===== -->
+        <section id="view-admin-dashboard" class="view-section hidden">
+            <header class="dashboard-header flex-between">
                 <div>
                     <h2>Admin <span>Terminal</span></h2>
                     <p>Manage and update municipal reports.</p>
@@ -154,7 +157,7 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Date <svg width="12" height="12" viewBox="0 0 24 24"><path fill="currentColor" d="M11 20V7.825l-5.6 5.6L4 12l8-8l8 8l-1.4 1.425l-5.6-5.6V20z"/></svg></th>
+                                <th>Date</th>
                                 <th>Reporter</th>
                                 <th>Location</th>
                                 <th>Issue</th>
@@ -164,7 +167,6 @@
                             </tr>
                         </thead>
                         <tbody id="admin-complaints-list">
-                            <!-- JS injects rows here -->
                             <tr><td colspan="7" class="text-center py-4">Fetching reports...</td></tr>
                         </tbody>
                     </table>
@@ -174,11 +176,11 @@
 
     </main>
 
-    <!-- Admin Authorization Modal -->
-    <div id="modal-adminAuth" class="modal hidden fade-in">
+    <!-- ========== ADMIN AUTHORIZATION MODAL ========== -->
+    <div id="modal-adminAuth" class="modal hidden">
         <div class="modal-backdrop"></div>
         <div class="modal-content glass-panel bounce-in">
-            <button class="close-modal">&times;</button>
+            <button class="close-modal" aria-label="Close modal">&times;</button>
             <div class="modal-header">
                 <h3>Admin Authorization</h3>
                 <p>Register your Google account as an administrator.</p>
@@ -194,7 +196,7 @@
                 <div class="auth-box">
                     <p>You will be signed in with your Google account and registered as an Admin.</p>
                     <button type="button" id="btn-admin-google" class="btn btn-google btn-block">
-                        <svg viewBox="0 0 24 24" class="google-icon">
+                        <svg viewBox="0 0 24 24" class="google-icon" aria-hidden="true">
                             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -208,13 +210,13 @@
         </div>
     </div>
 
-    <!-- Notification Toast -->
+    <!-- ========== TOAST NOTIFICATION ========== -->
     <div id="toast" class="toast hidden">
-        <span id="toast-icon">✓</span>
+        <span id="toast-icon">&#10003;</span>
         <span id="toast-msg">Operation successful</span>
     </div>
 
-    <!-- Firebase SDK (Modular) will be imported in app.js -->
+    <!-- ========== SCRIPTS ========== -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
