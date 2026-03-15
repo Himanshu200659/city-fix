@@ -439,6 +439,9 @@ function setupAdminListener(sortMethod = 'date-desc') {
                 }
             });
         });
+    }, (error) => {
+        console.error("Admin data fetch error:", error);
+        ui.adminList.innerHTML = `<tr><td colspan="7" class="text-center py-4" style="color:var(--color-danger)">Firebase Permission Error. Please check your Firestore Security Rules to allow reading the 'complaints' collection.</td></tr>`;
     });
 }
 
