@@ -15,13 +15,13 @@ import {
 
 // ─── Config ────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyCQ1cc8A2Vd0MWHYYd891c-dh2VWv5hFtA",
-  authDomain: "cityfix-12f8e.firebaseapp.com",
-  databaseURL: "https://cityfix-12f8e-default-rtdb.firebaseio.com",
-  projectId: "cityfix-12f8e",
-  storageBucket: "cityfix-12f8e.firebasestorage.app",
+  apiKey:            "AIzaSyCQ1cc8A2Vd0MWHYYd891c-dh2VWv5hFtA",
+  authDomain:        "cityfix-12f8e.firebaseapp.com",
+  databaseURL:       "https://cityfix-12f8e-default-rtdb.firebaseio.com",
+  projectId:         "cityfix-12f8e",
+  storageBucket:     "cityfix-12f8e.firebasestorage.app",
   messagingSenderId: "668200888655",
-  appId: "1:668200888655:web:8798edf0179a8fa4e4fd3a"
+  appId:             "1:668200888655:web:8798edf0179a8fa4e4fd3a"
 };
 
 const app  = initializeApp(firebaseConfig);
@@ -32,23 +32,27 @@ const db   = getDatabase(app);
 // ─── Helpers ────────────────────────────────────────────
 const el = id => document.getElementById(id);
 
+/** Show/hide top-level views */
 function showView(which) {
   el('loading-overlay').style.display = 'none';
   el('view-landing').style.display    = (which === 'landing') ? 'flex'  : 'none';
   el('view-app').style.display        = (which === 'app')     ? 'flex'  : 'none';
 }
 
+/** Show a panel inside the app shell */
 function showPanel(id) {
   ['panel-feed','panel-new','panel-admin','panel-stats'].forEach(pid => {
     el(pid).style.display = (pid === id) ? 'flex' : 'none';
   });
 }
 
+/** Highlight the active sidebar button */
 function setActiveNav(targetBtn) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   if (targetBtn) targetBtn.classList.add('active');
 }
 
+/** Toast notification */
 function toast(msg, type = 'info') {
   const t = el('toast');
   t.textContent = msg;
@@ -81,11 +85,11 @@ function statusCSSClass(s) {
 // ─── State ──────────────────────────────────────────────
 let currentUser   = null;
 let currentRole   = 'citizen';
-let wantAdminRole = false;
-let feedUnsub     = null;
-let adminUnsub    = null;
+let wantAdminRole = false;      // set by which login button was clicked
+let feedUnsub     = null;       // unsubscribe fn for citizen feed listener
+let adminUnsub    = null;       // unsubscribe fn for admin listener
 
-// ─── Landing stats ──────────────────────────────────────
+// ─── Landing stats (public, runs always) ────────────────
 onValue(ref(db, 'complaints'), snap => {
   const all = snap.val() ? Object.values(snap.val()) : [];
   el('stat-total').textContent    = all.length;
@@ -93,7 +97,7 @@ onValue(ref(db, 'complaints'), snap => {
   el('stat-pending').textContent  = all.filter(c => c.status === 'Pending').length;
 });
 
-// ─── Auth ───────────────────────────────────────────────
+// ─── Auth ────────────────────────────────────────────────
 el('btn-citizen-login').addEventListener('click', () => loginWith(false));
 el('btn-admin-login').addEventListener('click',   () => loginWith(true));
 el('btn-logout').addEventListener('click', () => signOut(auth));
@@ -115,6 +119,7 @@ onAuthStateChanged(auth, async user => {
   } else {
     currentUser = null;
     currentRole = 'citizen';
+    // Detach any listeners
     if (feedUnsub)  { feedUnsub();  feedUnsub  = null; }
     if (adminUnsub) { adminUnsub(); adminUnsub = null; }
     showView('landing');
@@ -122,6 +127,7 @@ onAuthStateChanged(auth, async user => {
 });
 
 async function resolveRole(user) {
+  // If user clicked "Admin" login button, write admin role first
   if (wantAdminRole) {
     await update(ref(db, `users/${user.uid}`), {
       role: 'admin', email: user.email, name: user.displayName
@@ -129,10 +135,12 @@ async function resolveRole(user) {
     wantAdminRole = false;
   }
 
+  // Read role from DB
   const snap = await get(ref(db, `users/${user.uid}/role`));
   if (snap.exists()) {
-    currentRole = snap.val();
+    currentRole = snap.val(); // 'admin' | 'citizen'
   } else {
+    // First-ever login → default citizen
     await update(ref(db, `users/${user.uid}`), {
       role: 'citizen', email: user.email, name: user.displayName
     });
@@ -141,15 +149,18 @@ async function resolveRole(user) {
 }
 
 function bootApp() {
+  // Update sidebar user info
   const name = currentUser.displayName || currentUser.email || 'User';
   el('user-avatar').textContent    = initials(name);
   el('user-name').textContent      = name.split(' ')[0];
   el('user-role-label').textContent = currentRole === 'admin' ? 'Admin' : 'Citizen';
   el('user-role-label').className  = 'user-role-badge' + (currentRole === 'admin' ? ' admin' : '');
 
+  // Show correct sidebar nav
   el('citizen-nav').style.display = currentRole === 'citizen' ? 'flex' : 'none';
   el('admin-nav').style.display   = currentRole === 'admin'   ? 'flex' : 'none';
 
+  // Route to first panel
   if (currentRole === 'admin') {
     showPanel('panel-admin');
     highlightNav('panel-admin');
@@ -177,6 +188,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
   });
 });
 
+// "New Report" shortcut from feed header
 el('btn-goto-new').addEventListener('click', () => {
   showPanel('panel-new');
   highlightNav('panel-new');
@@ -212,7 +224,7 @@ el('btn-clear-form').addEventListener('click', () => {
   });
 });
 
-// ─── Submit Report ───────────────────────────────────────
+// ─── Submit Report ────────────────────────────────────────
 el('form-complaint').addEventListener('submit', async e => {
   e.preventDefault();
   if (!validateForm()) return;
@@ -245,6 +257,7 @@ el('form-complaint').addEventListener('submit', async e => {
     showPanel('panel-feed');
     highlightNav('panel-feed');
   } catch (err) {
+    console.error('Submit error:', err);
     toast('Submission failed: ' + err.message, 'error');
   } finally {
     submitBtn.disabled      = false;
@@ -272,4 +285,200 @@ function validateForm() {
     }
   });
   return ok;
+}
+
+// ─── Citizen Feed (real-time) ─────────────────────────────
+let feedCache = [];
+
+function subscribeFeed() {
+  if (feedUnsub) { feedUnsub(); feedUnsub = null; }
+
+  const q = query(ref(db, 'complaints'), orderByChild('createdAt'));
+  feedUnsub = onValue(q, snap => {
+    feedCache = [];
+    snap.forEach(child => feedCache.push({ id: child.key, ...child.val() }));
+    // Newest first, and only this user's reports
+    feedCache = feedCache.filter(c => c.uid === currentUser.uid).reverse();
+    applyFeedFilters();
+  });
+
+  // Attach filter listeners (only once)
+  el('feed-filter-status').onchange   = applyFeedFilters;
+  el('feed-filter-priority').onchange = applyFeedFilters;
+}
+
+function applyFeedFilters() {
+  const st = el('feed-filter-status').value;
+  const pr = el('feed-filter-priority').value;
+  const list = feedCache.filter(c =>
+    (!st || c.status === st) && (!pr || c.priority === pr)
+  );
+  renderFeed(list);
+}
+
+function renderFeed(data) {
+  const container = el('feed-list');
+  container.innerHTML = '';
+
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state">No reports found. Use "+ New Report" to file one!</div>';
+    return;
+  }
+
+  data.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'complaint-card';
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="card-category">${c.category || '—'}</span>
+        <span class="priority-pill ${priorityClass(c.priority)}">${c.priority || '—'}</span>
+      </div>
+      <p class="card-desc">${c.description || ''}</p>
+      <p class="card-addr">📍 ${c.address || ''}${c.location ? ' &middot; <small>' + c.location + '</small>' : ''}</p>
+      <div class="card-footer">
+        <span class="status-pill ${statusCSSClass(c.status)}">${c.status || 'Pending'}</span>
+        <span class="card-date">${fmtDate(c.createdAt)}</span>
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+// ─── Admin: All Issues (real-time) ───────────────────────
+let adminCache = [];
+
+function subscribeAdmin() {
+  if (adminUnsub) { adminUnsub(); adminUnsub = null; }
+
+  const q = query(ref(db, 'complaints'), orderByChild('createdAt'));
+  adminUnsub = onValue(q, snap => {
+    adminCache = [];
+    snap.forEach(child => adminCache.push({ id: child.key, ...child.val() }));
+    adminCache.reverse();  // newest first
+    el('admin-count-badge').textContent = adminCache.length;
+    applyAdminFilters();
+  });
+
+  el('admin-filter-status').onchange = applyAdminFilters;
+  el('admin-sort').onchange          = applyAdminFilters;
+}
+
+const PRIO = { High: 3, Medium: 2, Low: 1 };
+
+function applyAdminFilters() {
+  const st   = el('admin-filter-status').value;
+  const sort = el('admin-sort').value;
+
+  let data = st ? adminCache.filter(c => c.status === st) : [...adminCache];
+
+  data.sort((a, b) => {
+    switch (sort) {
+      case 'date-asc':      return a.createdAt - b.createdAt;
+      case 'priority-desc': return (PRIO[b.priority] || 0) - (PRIO[a.priority] || 0);
+      case 'priority-asc':  return (PRIO[a.priority] || 0) - (PRIO[b.priority] || 0);
+      default:              return b.createdAt - a.createdAt; // date-desc
+    }
+  });
+
+  renderAdminTable(data);
+}
+
+function renderAdminTable(data) {
+  const wrap = el('admin-list');
+  wrap.innerHTML = '';
+
+  if (!data.length) {
+    wrap.innerHTML = '<div class="empty-state">No issues found.</div>';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'issues-table';
+
+  const thead = document.createElement('thead');
+  thead.innerHTML = `<tr>
+    <th>Date</th>
+    <th>Reporter</th>
+    <th>Category</th>
+    <th>Priority</th>
+    <th>Address</th>
+    <th>Description</th>
+    <th>Status</th>
+    <th>Update Status</th>
+  </tr>`;
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  data.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtDate(c.createdAt)}</td>
+      <td>${c.displayName || c.email || '—'}</td>
+      <td>${c.category || '—'}</td>
+      <td><span class="priority-pill ${priorityClass(c.priority)}">${c.priority || '—'}</span></td>
+      <td>${c.address || '—'}${c.location ? '<br><small style="color:var(--text-dim)">' + c.location + '</small>' : ''}</td>
+      <td>${c.description || '—'}</td>
+      <td><span class="status-pill ${statusCSSClass(c.status)}">${c.status || 'Pending'}</span></td>
+      <td style="white-space:nowrap">
+        <select class="status-select-inline">
+          <option ${c.status === 'Pending'     ? 'selected' : ''}>Pending</option>
+          <option ${c.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+          <option ${c.status === 'Resolved'    ? 'selected' : ''}>Resolved</option>
+          <option ${c.status === 'Rejected'    ? 'selected' : ''}>Rejected</option>
+        </select>
+        <button class="btn-update" data-id="${c.id}">Save</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+
+  // Single delegated listener on tbody (re-mounted each render, so no duplicates)
+  tbody.addEventListener('click', async e => {
+    const btn = e.target.closest('.btn-update');
+    if (!btn) return;
+    const id  = btn.dataset.id;
+    const sel = btn.previousElementSibling; // the <select> before the button
+    if (!sel) return;
+    btn.textContent = '…';
+    btn.disabled = true;
+    try {
+      await update(ref(db, `complaints/${id}`), { status: sel.value });
+      toast('Status updated ✅', 'success');
+    } catch (err) {
+      toast('Update failed: ' + err.message, 'error');
+    } finally {
+      btn.textContent = 'Save';
+      btn.disabled = false;
+    }
+  });
+}
+
+// ─── Admin Stats (real-time) ──────────────────────────────
+function subscribeAdminStats() {
+  onValue(ref(db, 'complaints'), snap => {
+    const all = [];
+    snap.forEach(c => all.push(c.val()));
+
+    el('sc-total').querySelector('.sc-num').textContent    = all.length;
+    el('sc-pending').querySelector('.sc-num').textContent  = all.filter(c => c.status === 'Pending').length;
+    el('sc-progress').querySelector('.sc-num').textContent = all.filter(c => c.status === 'In Progress').length;
+    el('sc-resolved').querySelector('.sc-num').textContent = all.filter(c => c.status === 'Resolved').length;
+
+    // Category bar chart
+    const cats = {};
+    all.forEach(c => { if (c.category) cats[c.category] = (cats[c.category] || 0) + 1; });
+    const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+    const max = sorted[0]?.[1] || 1;
+    const barsEl = el('category-bars');
+    barsEl.innerHTML = '';
+    sorted.forEach(([cat, count]) => {
+      const row = document.createElement('div');
+      row.className = 'bar-row';
+      row.innerHTML = `
+        <span class="bar-label">${cat}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round(count / max * 100)}%"></div></div>
+        <span class="bar-count">${count}</span>`;
+      barsEl.appendChild(row);
+    });
+  });
 }
