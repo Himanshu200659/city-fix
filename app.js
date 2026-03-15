@@ -1,222 +1,275 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CityFix | Municipal Complaint Platform</title>
-    <meta name="description" content="CityFix bridges the gap between citizens and the municipality. Submit, track, and resolve local infrastructure issues seamlessly.">
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- Local CSS -->
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-    <!-- Abstract Background Elements -->
-    <div class="bg-shape shape-1"></div>
-    <div class="bg-shape shape-2"></div>
-    <div class="bg-shape shape-3"></div>
+// ══════════════════════════════════════════════════════
+//  CITY FIX – app.js  (Realtime Database, no Storage)
+// ══════════════════════════════════════════════════════
+import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getAnalytics }
+  from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
+import {
+  getAuth, GoogleAuthProvider,
+  signInWithPopup, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+import {
+  getDatabase, ref, push, update, get, onValue, query, orderByChild
+} from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
 
-    <!-- ========== HEADER ========== -->
-    <header class="main-header glass-panel">
-        <div class="header-container">
-            <h1 class="logo">City<span>Fix</span></h1>
-            <nav id="nav-actions">
-                <button id="btn-admin-portal" class="btn btn-text">Admin Access</button>
-                <div id="user-profile" class="hidden">
-                    <img id="user-avatar" src="" alt="User Avatar" class="avatar">
-                    <span id="user-name" class="name"></span>
-                    <button id="btn-logout" class="btn btn-outline btn-small">Sign Out</button>
-                </div>
-            </nav>
-        </div>
-    </header>
+// ─── Config ────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyCQ1cc8A2Vd0MWHYYd891c-dh2VWv5hFtA",
+  authDomain: "cityfix-12f8e.firebaseapp.com",
+  databaseURL: "https://cityfix-12f8e-default-rtdb.firebaseio.com",
+  projectId: "cityfix-12f8e",
+  storageBucket: "cityfix-12f8e.firebasestorage.app",
+  messagingSenderId: "668200888655",
+  appId: "1:668200888655:web:8798edf0179a8fa4e4fd3a"
+};
 
-    <!-- ========== MAIN CONTENT ========== -->
-    <main class="main-content">
+const app  = initializeApp(firebaseConfig);
+getAnalytics(app);
+const auth = getAuth(app);
+const db   = getDatabase(app);
 
-        <!-- ===== VIEW: Landing / Login ===== -->
-        <section id="view-landing" class="view-section active">
-            <div class="landing-grid">
-                <div class="landing-text">
-                    <h2 class="hero-title">Elevating <span>Civic</span> Responsibility.</h2>
-                    <p class="hero-subtitle">CityFix bridges the gap between citizens and the municipality. Submitting, tracking, and resolving local infrastructure issues has never been this seamless.</p>
-                    
-                    <div class="quote-card glass-panel">
-                        <div class="quote-icon">&#10077;</div>
-                        <p>"A thriving city is built on the proactive engagement of its people."</p>
-                    </div>
-                </div>
+// ─── Helpers ────────────────────────────────────────────
+const el = id => document.getElementById(id);
 
-                <div class="login-container">
-                    <div class="auth-card glass-panel float-anim">
-                        <h3>Citizen Portal</h3>
-                        <p>Sign in to file and track your reports.</p>
-                        <button id="btn-google-login" class="btn btn-google">
-                            <svg viewBox="0 0 24 24" class="google-icon" aria-hidden="true">
-                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                            </svg>
-                            Continue with Google
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </section>
+function showView(which) {
+  el('loading-overlay').style.display = 'none';
+  el('view-landing').style.display    = (which === 'landing') ? 'flex'  : 'none';
+  el('view-app').style.display        = (which === 'app')     ? 'flex'  : 'none';
+}
 
-        <!-- ===== VIEW: Citizen Dashboard ===== -->
-        <section id="view-citizen-dashboard" class="view-section hidden">
-            <header class="dashboard-header">
-                <h2>Your <span>Dashboard</span></h2>
-                <p>Submit new issues or monitor the status of your active reports.</p>
-            </header>
+function showPanel(id) {
+  ['panel-feed','panel-new','panel-admin','panel-stats'].forEach(pid => {
+    el(pid).style.display = (pid === id) ? 'flex' : 'none';
+  });
+}
 
-            <div class="dashboard-grid">
-                <!-- Complaint Form -->
-                <div class="form-card glass-panel">
-                    <h3>File a Report</h3>
-                    <form id="form-complaint">
-                        <div class="form-row">
-                            <div class="form-group half">
-                                <label for="complaint-city">City</label>
-                                <input type="text" id="complaint-city" placeholder="e.g. Metropolis" required>
-                            </div>
-                            <div class="form-group half">
-                                <label for="complaint-locality">Locality</label>
-                                <div class="input-with-btn">
-                                    <input type="text" id="complaint-locality" placeholder="Sector, Street, or Coordinates" required>
-                                    <button type="button" id="btn-geolocate" class="icon-btn" title="Get current location">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="complaint-priority">Impact Priority</label>
-                            <div class="custom-select-wrapper">
-                                <select id="complaint-priority" required>
-                                    <option value="Low">Low (Structural defect, no immediate danger)</option>
-                                    <option value="Medium" selected>Medium (Nuisance, requires attention)</option>
-                                    <option value="High">High (Immediate hazard, public safety risk)</option>
-                                </select>
-                            </div>
-                        </div>
+function setActiveNav(targetBtn) {
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  if (targetBtn) targetBtn.classList.add('active');
+}
 
-                        <div class="form-group">
-                            <label for="complaint-description">Details</label>
-                            <textarea id="complaint-description" rows="4" placeholder="Describe the issue in detail..." required></textarea>
-                        </div>
+function toast(msg, type = 'info') {
+  const t = el('toast');
+  t.textContent = msg;
+  t.className   = `toast ${type}`;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 3600);
+}
 
-                        <button type="submit" id="btn-submit-complaint" class="btn btn-primary btn-block">
-                            <span>Submit Report</span>
-                            <div class="loader hidden" id="submit-loader"></div>
-                        </button>
-                    </form>
-                </div>
+function fmtDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
 
-                <!-- Past Complaints -->
-                <div class="records-container">
-                    <div class="records-header">
-                        <h3>Recent Activity</h3>
-                    </div>
-                    <div id="citizen-complaints-list" class="complaints-list">
-                        <div class="loading-state">
-                            <div class="spinner"></div>
-                            <p>Loading your reports...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+function initials(name = '') {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+}
 
-        <!-- ===== VIEW: Admin Dashboard ===== -->
-        <section id="view-admin-dashboard" class="view-section hidden">
-            <header class="dashboard-header flex-between">
-                <div>
-                    <h2>Admin <span>Terminal</span></h2>
-                    <p>Manage and update municipal reports.</p>
-                </div>
-                <div class="admin-controls glass-panel-sm">
-                    <label for="sort-complaints">Sort by:</label>
-                    <div class="custom-select-wrapper inline">
-                        <select id="sort-complaints">
-                            <option value="date-desc">Newest First</option>
-                            <option value="date-asc">Oldest First</option>
-                            <option value="priority">Highest Priority</option>
-                        </select>
-                    </div>
-                </div>
-            </header>
-            
-            <div class="admin-panel glass-panel">
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Reporter</th>
-                                <th>Location</th>
-                                <th>Issue</th>
-                                <th>Priority</th>
-                                <th>Status</th>
-                                <th>Update</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-complaints-list">
-                            <tr><td colspan="7" class="text-center py-4">Fetching reports...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
+function priorityClass(p) {
+  return p === 'High' ? 'High' : p === 'Medium' ? 'Medium' : 'Low';
+}
 
-    </main>
+function statusCSSClass(s) {
+  return (s || '').replace(' ', '-');
+}
 
-    <!-- ========== ADMIN AUTHORIZATION MODAL ========== -->
-    <div id="modal-adminAuth" class="modal hidden">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content glass-panel bounce-in">
-            <button class="close-modal" aria-label="Close modal">&times;</button>
-            <div class="modal-header">
-                <h3>Admin Authorization</h3>
-                <p>Register your Google account as an administrator.</p>
-            </div>
-            
-            <form id="form-admin-register">
-                <div class="form-group">
-                    <label for="admin-auth-code">Secret Authorization Code</label>
-                    <input type="password" id="admin-auth-code" placeholder="Enter provided passcode" required>
-                    <small class="form-help">Only authorized municipal personnel have access to this code.</small>
-                </div>
-                
-                <div class="auth-box">
-                    <p>You will be signed in with your Google account and registered as an Admin.</p>
-                    <button type="button" id="btn-admin-google" class="btn btn-google btn-block">
-                        <svg viewBox="0 0 24 24" class="google-icon" aria-hidden="true">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                        </svg>
-                        Sign in as Admin
-                    </button>
-                    <p id="admin-error-msg" class="error-text hidden"></p>
-                </div>
-            </form>
-        </div>
-    </div>
+// ─── State ──────────────────────────────────────────────
+let currentUser   = null;
+let currentRole   = 'citizen';
+let wantAdminRole = false;
+let feedUnsub     = null;
+let adminUnsub    = null;
 
-    <!-- ========== TOAST NOTIFICATION ========== -->
-    <div id="toast" class="toast hidden">
-        <span id="toast-icon">&#10003;</span>
-        <span id="toast-msg">Operation successful</span>
-    </div>
+// ─── Landing stats ──────────────────────────────────────
+onValue(ref(db, 'complaints'), snap => {
+  const all = snap.val() ? Object.values(snap.val()) : [];
+  el('stat-total').textContent    = all.length;
+  el('stat-resolved').textContent = all.filter(c => c.status === 'Resolved').length;
+  el('stat-pending').textContent  = all.filter(c => c.status === 'Pending').length;
+});
 
-    <!-- ========== SCRIPTS ========== -->
-    <script type="module" src="app.js"></script>
-</body>
-</html>
+// ─── Auth ───────────────────────────────────────────────
+el('btn-citizen-login').addEventListener('click', () => loginWith(false));
+el('btn-admin-login').addEventListener('click',   () => loginWith(true));
+el('btn-logout').addEventListener('click', () => signOut(auth));
+
+async function loginWith(asAdmin) {
+  wantAdminRole = asAdmin;
+  try {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  } catch (e) {
+    toast('Login failed: ' + e.message, 'error');
+  }
+}
+
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    currentUser = user;
+    await resolveRole(user);
+    bootApp();
+  } else {
+    currentUser = null;
+    currentRole = 'citizen';
+    if (feedUnsub)  { feedUnsub();  feedUnsub  = null; }
+    if (adminUnsub) { adminUnsub(); adminUnsub = null; }
+    showView('landing');
+  }
+});
+
+async function resolveRole(user) {
+  if (wantAdminRole) {
+    await update(ref(db, `users/${user.uid}`), {
+      role: 'admin', email: user.email, name: user.displayName
+    });
+    wantAdminRole = false;
+  }
+
+  const snap = await get(ref(db, `users/${user.uid}/role`));
+  if (snap.exists()) {
+    currentRole = snap.val();
+  } else {
+    await update(ref(db, `users/${user.uid}`), {
+      role: 'citizen', email: user.email, name: user.displayName
+    });
+    currentRole = 'citizen';
+  }
+}
+
+function bootApp() {
+  const name = currentUser.displayName || currentUser.email || 'User';
+  el('user-avatar').textContent    = initials(name);
+  el('user-name').textContent      = name.split(' ')[0];
+  el('user-role-label').textContent = currentRole === 'admin' ? 'Admin' : 'Citizen';
+  el('user-role-label').className  = 'user-role-badge' + (currentRole === 'admin' ? ' admin' : '');
+
+  el('citizen-nav').style.display = currentRole === 'citizen' ? 'flex' : 'none';
+  el('admin-nav').style.display   = currentRole === 'admin'   ? 'flex' : 'none';
+
+  if (currentRole === 'admin') {
+    showPanel('panel-admin');
+    highlightNav('panel-admin');
+    subscribeAdmin();
+    subscribeAdminStats();
+  } else {
+    showPanel('panel-feed');
+    highlightNav('panel-feed');
+    subscribeFeed();
+  }
+
+  showView('app');
+}
+
+function highlightNav(panelId) {
+  const btn = document.querySelector(`.nav-item[data-panel="${panelId}"]`);
+  setActiveNav(btn);
+}
+
+// ─── Sidebar Nav ─────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    showPanel(btn.dataset.panel);
+    setActiveNav(btn);
+  });
+});
+
+el('btn-goto-new').addEventListener('click', () => {
+  showPanel('panel-new');
+  highlightNav('panel-new');
+});
+
+// ─── Geolocation ─────────────────────────────────────────
+el('btn-geolocate').addEventListener('click', () => {
+  const iconEl = el('geo-icon');
+  iconEl.textContent = '⏳';
+  if (!navigator.geolocation) {
+    toast('Geolocation not supported by your browser.', 'error');
+    iconEl.textContent = '📍';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      el('comp-location').value = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+      iconEl.textContent = '✅';
+    },
+    () => {
+      toast('Location access denied or unavailable.', 'error');
+      iconEl.textContent = '📍';
+    }
+  );
+});
+
+// ─── Clear Form ──────────────────────────────────────────
+el('btn-clear-form').addEventListener('click', () => {
+  el('form-complaint').reset();
+  el('geo-icon').textContent = '📍';
+  ['err-category','err-priority','err-address','err-desc'].forEach(id => {
+    el(id).textContent = '';
+  });
+});
+
+// ─── Submit Report ───────────────────────────────────────
+el('form-complaint').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!validateForm()) return;
+
+  const submitBtn   = el('btn-submit-complaint');
+  const labelEl     = el('submit-label');
+  const spinnerEl   = el('submit-spinner');
+  submitBtn.disabled = true;
+  labelEl.style.display   = 'none';
+  spinnerEl.style.display = 'inline-block';
+
+  const complaint = {
+    uid:         currentUser.uid,
+    email:       currentUser.email,
+    displayName: currentUser.displayName || currentUser.email,
+    category:    el('comp-category').value,
+    priority:    el('comp-priority').value,
+    address:     el('comp-address').value.trim(),
+    location:    el('comp-location').value.trim(),
+    description: el('comp-description').value.trim(),
+    status:      'Pending',
+    createdAt:   Date.now()
+  };
+
+  try {
+    await push(ref(db, 'complaints'), complaint);
+    toast('✅ Report submitted successfully!', 'success');
+    el('form-complaint').reset();
+    el('geo-icon').textContent = '📍';
+    showPanel('panel-feed');
+    highlightNav('panel-feed');
+  } catch (err) {
+    toast('Submission failed: ' + err.message, 'error');
+  } finally {
+    submitBtn.disabled      = false;
+    labelEl.style.display   = 'inline';
+    spinnerEl.style.display = 'none';
+  }
+});
+
+function validateForm() {
+  const rules = [
+    ['comp-category',    'err-category', 'Please select a category'],
+    ['comp-priority',    'err-priority', 'Please select a priority'],
+    ['comp-address',     'err-address',  'Please enter an address'],
+    ['comp-description', 'err-desc',     'Please describe the issue'],
+  ];
+  let ok = true;
+  rules.forEach(([fieldId, errId, msg]) => {
+    const field = el(fieldId);
+    const errEl = el(errId);
+    if (!field.value.trim()) {
+      errEl.textContent = msg;
+      ok = false;
+    } else {
+      errEl.textContent = '';
+    }
+  });
+  return ok;
+}
