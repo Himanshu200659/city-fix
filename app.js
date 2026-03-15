@@ -305,8 +305,7 @@ function setupCitizenListener(uid) {
     
     const q = query(
         collection(db, "complaints"), 
-        where("userId", "==", uid),
-        orderBy("createdAt", "desc")
+        where("userId", "==", uid)
     );
 
     unsubscribeCitizen = onSnapshot(q, (snapshot) => {
@@ -315,7 +314,13 @@ function setupCitizenListener(uid) {
             return;
         }
 
-        ui.citizenList.innerHTML = snapshot.docs.map(doc => {
+        let docsObj = snapshot.docs.sort((a,b) => {
+            const dateA = a.data().createdAt?.toDate() || new Date(0);
+            const dateB = b.data().createdAt?.toDate() || new Date(0);
+            return dateB - dateA;
+        });
+
+        ui.citizenList.innerHTML = docsObj.map(doc => {
             const data = doc.data();
             return `
                 <div class="glass-panel complaint-card ${getPriorityClass(data.priority)}">
@@ -348,16 +353,8 @@ function setupAdminListener(sortMethod = 'date-desc') {
     let q;
     const complaintsRef = collection(db, "complaints");
     
-    // Simple sorts to avoid needing multiple composite indexes immediately
-    // In production, priority sorting with date needs a composite index. 
-    if (sortMethod === 'date-desc') {
-        q = query(complaintsRef, orderBy("createdAt", "desc"));
-    } else if (sortMethod === 'date-asc') {
-        q = query(complaintsRef, orderBy("createdAt", "asc"));
-    } else {
-        // If sorting by priority, we pull all and sort client side to avoid complex index requirements for this demo
-        q = query(complaintsRef, orderBy("createdAt", "desc"));
-    }
+    // Simple sorts to avoid needing multiple composite indexes
+    q = query(complaintsRef); // Pull all and sort client-side to prevent complex index delays
 
     unsubscribeAdmin = onSnapshot(q, (snapshot) => {
         if (snapshot.empty) {
@@ -367,13 +364,25 @@ function setupAdminListener(sortMethod = 'date-desc') {
 
         let docs = snapshot.docs;
         
-        // Client-side priority sort if requested
+        // Client-side priority and date soft if requested
         if (sortMethod === 'priority') {
             const priorityMap = { 'High': 3, 'Medium': 2, 'Low': 1 };
             docs = docs.sort((a,b) => {
                 const pA = priorityMap[a.data().priority] || 0;
                 const pB = priorityMap[b.data().priority] || 0;
                 return pB - pA;
+            });
+        } else if (sortMethod === 'date-desc') {
+            docs = docs.sort((a,b) => {
+                const dateA = a.data().createdAt?.toDate() || new Date(0);
+                const dateB = b.data().createdAt?.toDate() || new Date(0);
+                return dateB - dateA;
+            });
+        } else if (sortMethod === 'date-asc') {
+            docs = docs.sort((a,b) => {
+                const dateA = a.data().createdAt?.toDate() || new Date(0);
+                const dateB = b.data().createdAt?.toDate() || new Date(0);
+                return dateA - dateB;
             });
         }
 
